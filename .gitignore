@@ -1,0 +1,13 @@
+.env
+.venv/
+data/
+__pycache__/
+*.pyc
+client_secret*.json
+token*.json
+tools/
+*.zip
+samples/
+*.db
+*.db-*
+*.sqlite*

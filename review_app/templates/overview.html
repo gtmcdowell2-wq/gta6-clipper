@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% block main %}
+<div class="top"><div><h1>Overview</h1><p>{{ running }} of {{ agents|length }} agents active · network {{ 'running' if network_on else 'not started' }}</p></div><div class="sp"></div>
+<a class="btn pri" href="{{ url_for('review') }}">Review {{ nav.pending }} clip{{ '' if nav.pending == 1 else 's' }}</a></div>
+<div id="live">
+{% for a in alerts %}<div class="alert {{ a.level }}"><b>{{ a.title }}</b> {{ a.text|safe }}</div>{% endfor %}
+{% if steps|rejectattr(1)|list %}<div class="card" style="margin-bottom:14px"><div class="row" style="margin-bottom:8px"><h2 style="flex:1">Getting started</h2><span class="mut small">{{ steps|selectattr(1)|list|length }} of {{ steps|length }} done</span></div>
+<div class="bar" style="margin-bottom:10px"><i style="width:{{ 100 * steps|selectattr(1)|list|length / steps|length }}%"></i></div>
+{% for label, done, link in steps %}<div class="row" style="padding:5px 0"><span class="pill {{ 'ok' if done else '' }} plain" style="min-width:52px;justify-content:center">{{ 'done' if done else 'to do' }}</span>{% if link and not done %}<a href="{{ link }}">{{ label }}</a>{% else %}<span class="{{ 'mut' if done }}">{{ label }}</span>{% endif %}</div>{% endfor %}</div>{% endif %}
+<div class="grid g4">
+<div class="card kpi"><div class="v">{{ k.pending }}</div><div class="l">Waiting for your review</div></div>
+<div class="card kpi"><div class="v">{{ k.scheduled }}</div><div class="l">Posts scheduled</div></div>
+<div class="card kpi"><div class="v">{{ k.posted }}</div><div class="l">Posted</div></div>
+<div class="card kpi"><div class="v">{{ '{:,}'.format(k.views) }}</div><div class="l">Total views</div></div>
+</div>
+<div class="sec"><h2>Pipeline</h2></div>
+<div class="card"><div class="funnel">
+{% for label, n in funnel %}<div><b>{{ n }}</b><span>{{ label }}</span></div>{% endfor %}</div></div>
+<div class="grid g2" style="margin-top:14px">
+<div><div class="sec" style="margin-top:12px"><h2>Agents</h2><div class="sp"></div><a class="btn sm" href="{{ url_for('agents_page') }}">Manage</a></div>
+<div class="card"><table>{% for a in agents %}<tr><td>{{ a.title }}</td><td><span class="pill {{ a.cls }}">{{ a.state }}</span></td><td class="mut small">{{ a.last_work_at|ago }}</td></tr>{% endfor %}</table></div></div>
+<div><div class="sec" style="margin-top:12px"><h2>Activity</h2></div>
+<div class="card"><div class="feed">{% for e in events %}<div class="{{ e.level }}"><span class="t">{{ e.ts|ago }}</span><span class="a">{{ e.title }}</span><span class="m">{{ e.message.split('\n')[0] }}</span></div>{% else %}<p class="empty">Nothing yet. Activity shows up here once agents start working.</p>{% endfor %}</div></div></div>
+</div></div>{% endblock %}

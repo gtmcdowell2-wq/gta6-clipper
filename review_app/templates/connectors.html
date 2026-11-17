@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% block main %}
+<div class="top"><div><h1>Connectors</h1><p>Accounts and tools the agents use. Connect from this PC at <code>http://127.0.0.1:{{ port }}</code>; the logins only accept that address.</p></div></div>
+{% if flash %}<div class="alert {{ flash.level }}">{{ flash.text }}</div>{% endif %}
+<div class="sec" style="margin-top:0"><h2>Social platforms</h2></div>
+<div class="grid g3">{% for c in socials %}<div class="card conn">
+ <div class="hd"><h2 style="flex:1">{{ c.label }}</h2><span class="pill {{ c.cls }}">{{ c.state }}</span></div>
+ {% if c.account %}<div>Account: <b>{{ c.account }}</b></div>{% endif %}
+ <div class="mut small">{{ c.note }}</div>{% if c.detail %}<div class="small" style="color:var(--warn);margin-top:4px">{{ c.detail }}</div>{% endif %}
+ <div class="row" style="margin-top:10px">
+ {% if c.configured %}{% if c.platform == 'instagram' %}<form method="post" action="{{ url_for('ig_verify') }}"><button class="pri sm">{{ 'Re-check token' if c.connected else 'Check token and connect' }}</button></form>
+ {% else %}<a class="btn pri sm" href="{{ url_for('connect_start', platform=c.platform) }}">{{ 'Reconnect' if c.connected else 'Connect' }}</a>{% endif %}
+ {% if c.connected %}<form method="post" action="{{ url_for('disconnect', platform=c.platform) }}"><button class="sm danger">Disconnect</button></form>{% endif %}{% endif %}</div>
+ {% if c.platform == 'youtube' and c.connected %}<form method="post" action="{{ url_for('set_youtube_privacy') }}" class="row" style="margin-top:10px"><label style="flex:1">New uploads are
+ <select name="privacy" onchange="this.form.submit()">{% for v in ('private','unlisted','public') %}<option {{ 'selected' if v == privacy }}>{{ v }}</option>{% endfor %}</select></label></form>{% endif %}
+ <ol>{% for s in c.steps %}<li>{{ s|safe }}</li>{% endfor %}</ol></div>{% endfor %}</div>
+<div class="sec"><h2>Tools and keys</h2></div>
+<div class="card scroll"><table>{% for t in tools %}<tr><td style="white-space:nowrap">{{ t.name }}</td><td><span class="pill {{ t.cls }}">{{ t.state }}</span></td><td class="mut">{{ t.detail }}</td></tr>{% endfor %}</table></div>
+<div class="sec"><h2>More connectors</h2></div>
+<div class="card mut">Facebook Reels, X and Snapchat Spotlight use the same connector interface (<code>clipper/posters/</code>) and are not built yet. An audited scheduler service (Blotato, Ayrshare, Upload-Post) can also plug in there if you want public TikTok posts without tapping Post in the app.</div>
+{% endblock %}

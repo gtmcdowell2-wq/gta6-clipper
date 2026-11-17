@@ -1,0 +1,27 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{{ title }} · Clip Control</title><link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v=3"></head><body>
+{% macro icon(d) %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ d|safe }}</svg>{% endmacro %}
+<div class="shell">
+<aside class="side"><div class="brand"><div class="logo">VI</div>Clip Control</div>
+<nav class="nav">
+<a class="{{ 'on' if page=='overview' }}" href="{{ url_for('overview') }}">{{ icon('<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>') }}Overview</a>
+<a class="{{ 'on' if page=='agents' }}" href="{{ url_for('agents_page') }}">{{ icon('<circle cx="12" cy="8" r="3.2"/><path d="M5 20a7 7 0 0 1 14 0"/><circle cx="19" cy="6" r="1.6"/><circle cx="5" cy="6" r="1.6"/>') }}Agents{% if nav.errors %}<span class="n">{{ nav.errors }}</span>{% endif %}</a>
+<a class="{{ 'on' if page=='review' }}" href="{{ url_for('review') }}">{{ icon('<rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="m10.5 9.5 4 2.5-4 2.5z"/>') }}Review{% if nav.pending %}<span class="n">{{ nav.pending }}</span>{% endif %}</a>
+<a class="{{ 'on' if page=='schedule' }}" href="{{ url_for('schedule') }}">{{ icon('<rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/>') }}Schedule</a>
+<a class="{{ 'on' if page=='stats' }}" href="{{ url_for('stats_page') }}">{{ icon('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>') }}Stats</a>
+<a class="{{ 'on' if page=='connectors' }}" href="{{ url_for('connectors') }}">{{ icon('<path d="M9 7V3M15 7V3M7 7h10v5a5 5 0 0 1-10 0zM12 17v4"/>') }}Connectors</a>
+<a class="{{ 'on' if page=='sources' }}" href="{{ url_for('sources_page') }}">{{ icon('<circle cx="12" cy="12" r="2.5"/><path d="M7.5 7.5a6.4 6.4 0 0 0 0 9M16.5 7.5a6.4 6.4 0 0 1 0 9M4.5 4.5a10.6 10.6 0 0 0 0 15M19.5 4.5a10.6 10.6 0 0 1 0 15"/>') }}Sources</a>
+</nav><div class="foot">GTA 6 launches Nov 19<br>Human approval is on</div></aside>
+<main>{% block main %}{% endblock %}</main></div>
+<script>
+// Pages with a #live region refresh it in place every few seconds, unless you are typing or watching.
+const live = document.getElementById('live');
+if (live) setInterval(async () => {
+  const el = document.activeElement, typing = el && /INPUT|TEXTAREA|SELECT/.test(el.tagName);
+  const playing = [...document.querySelectorAll('video')].some(v => !v.paused);
+  if (typing || playing || document.hidden) return;
+  try { const html = await (await fetch(location.href, {headers: {'X-Live': '1'}})).text();
+        const next = new DOMParser().parseFromString(html, 'text/html').getElementById('live');
+        if (next && next.innerHTML !== live.innerHTML) live.innerHTML = next.innerHTML; } catch (e) {}
+}, {{ live_ms|default(4000) }});
+</script></body></html>

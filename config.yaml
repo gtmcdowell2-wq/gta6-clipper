@@ -1,0 +1,81 @@
+paths:
+  data_dir: data
+  db: data/clipper.db
+
+download:
+  max_height: 1080
+  chunk_hours: 2            # rolling chunk size for live marathons
+  raw_vod_retention_days: 3 # delete raw VODs this long after their clips are approved
+
+transcribe:
+  model_gpu: large-v3       # or distil-large-v3
+  model_cpu: small
+  language: en
+
+signals:
+  candidates_per_2h: 30
+  context_seconds: 90       # transcript sent to the LLM on each side of a spike
+  chat_hype_terms: ["LMAO", "LMFAO", "OMG", "W", "L", "💀", "😭", "KEKW", "LUL", "NO WAY", "CLIP IT", "CLIP THAT"]
+
+selector:
+  provider: anthropic       # anthropic | gemini
+  model: claude-opus-5-5    # cheaper: claude-sonnet-5-5 or claude-haiku-5-5
+  effort: medium
+  min_seconds: 15
+  max_seconds: 90
+  min_overall_score: 7
+  preferred_archetypes: []  # filled in from stats once we know what wins
+
+editor:
+  width: 1080
+  height: 1920
+  fps: 60
+  cam_ratio: 0.38           # share of the frame given to the facecam
+  single_pane_aspect: 1.0   # no-facecam clips: width/height of the gameplay crop over the blurred fill
+  hook_seconds: 3
+  target_lufs: -14
+  caption_styles: [bold_yellow, clean_white, pop_green]   # rotated per clip
+
+safety:
+  # Titles/descriptions containing any of these are skipped outright (rule: no leaked footage).
+  leak_keywords: ["leak", "leaked", "early copy", "early access copy", "pre-release", "prerelease", "stolen build"]
+  # Transcript hits flag the clip for manual spoiler review.
+  spoiler_keywords: ["final mission", "last mission", "ending", "credits", "dies", "killed off", "plot twist"]
+  graphic_violence_lead_seconds: 7
+  # Permission levels that may ever be posted. "unknown" can be clipped for review but never posted.
+  postable_permissions: [campaign, public_ok]
+  auto_approve_threshold: null   # off. Leave off for the first weeks.
+
+watcher:
+  poll_minutes: 20
+  game_patterns: ["gta 6", "gta vi", "gta6", "grand theft auto vi", "grand theft auto 6"]
+
+posting:
+  stagger_minutes: [60, 90]
+  per_platform_daily: {youtube: 8, tiktok: 5, instagram: 8}   # TikTok allows 5 pending drafts per 24h
+  active_hours: [8, 24]          # local time window posts may be scheduled in
+  timezone: America/New_York     # audience timezone for the window above
+
+review_app:
+  host: 0.0.0.0             # reachable from a phone on the same Wi-Fi
+  port: 8787               # (5000 is taken by AirPlay/other services on many machines)
+
+agents:
+  # The agent network (run_pipeline.py start). Each agent can also be paused from the control center.
+  llm_model: claude-opus-5-5     # model for the Hook Critic (cheaper: claude-sonnet-5-5 / claude-haiku-5-5)
+  include_unknown_sources: false # Scout skips sources that can't be posted anyway
+  max_vods_per_source: 3
+  max_vod_age_days: 4
+  min_free_gb: 15                # Downloader pauses below this
+  reach_weights: {selector: 30, share: 15, hook_critic: 15, signal: 15, archetype: 10, duration: 10, fresh: 5}
+
+youtube:
+  privacy_status: private        # private | unlisted | public. Do one private test upload, then switch to public.
+  category_id: "20"              # Gaming
+  tags: [GTA6, GTA 6, Grand Theft Auto VI, gaming, shorts]
+
+tiktok:
+  mode: inbox                    # sends a draft to your TikTok inbox; you tap Post in the app
+
+instagram:
+  api_version: v27.0

@@ -1,0 +1,15 @@
+# permission: campaign   -> streamer runs a paid clipping campaign (fill campaign + its rules)
+#             public_ok  -> creator publicly allows clipping (put the proof link in notes)
+#             unknown    -> clips are cut for review but can NEVER be posted
+# Everything starts as "unknown". Upgrade a source only after you've confirmed it yourself.
+# layout: auto | split (cam top, gameplay bottom) | gameplay (no facecam, blurred fill)
+# campaign / caption_suffix: campaign name, and text every caption must end with (required credit,
+#   hashtags, paid-partnership disclosure). Copy these from the campaign brief.
+# cam: optional fixed facecam box in source pixels, [x, y, w, h]. Omit to auto-detect.
+sources:
+  - {name: Kai Cenat,   handle: kaicenat,    platform: twitch,  url: "https://www.twitch.tv/kaicenat",       permission: unknown, layout: auto, live_marathon: true}
+  - {name: IShowSpeed,  handle: ishowspeed,  platform: youtube, url: "https://www.youtube.com/@IShowSpeed",  permission: unknown, layout: auto}
+  - {name: Adin Ross,   handle: adinross,    platform: kick,    url: "https://kick.com/adinross",            permission: unknown, layout: auto}
+  - {name: xQc,         handle: xqc,         platform: kick,    url: "https://kick.com/xqc",                 permission: unknown, layout: auto}
+  - {name: Jynxzi,      handle: jynxzi,      platform: twitch,  url: "https://www.twitch.tv/jynxzi",         permission: unknown, layout: auto}
+  - {name: N3on,        handle: n3on,        platform: kick,    url: "https://kick.com/n3on",                permission: unknown, layout: auto}

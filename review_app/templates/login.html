@@ -1,0 +1,5 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Clip Control</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}"></head><body>
+<form class="login" method="post" action="{{ url_for('login') }}"><div class="brand" style="display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px"><div class="logo">VI</div>Clip Control</div>
+<label>PIN<input type="text" name="pin" inputmode="numeric" autocomplete="off" autofocus></label>
+{% if error %}<p style="color:var(--bad);margin:0">{{ error }}</p>{% endif %}<button class="pri">Open</button></form></body></html>

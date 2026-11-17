@@ -1,0 +1,16 @@
+{% extends "base.html" %}{% block main %}
+<div class="top"><div><h1>Stats</h1><p>Views are pulled every 6 hours. {% if learned %}The Growth Analyst is steering toward <b>{{ learned.preferred_archetypes|join(', ') }}</b>{% if learned.best_hours %}; best hours so far {{ learned.best_hours|join(', ') }}{% endif %}.{% else %}The Growth Analyst starts steering after 10 measured posts.{% endif %}</p></div><div class="sp"></div>
+<a class="btn pri" href="{{ url_for('stats_csv') }}">Export campaign CSV</a></div>
+<div class="grid g4">
+<div class="card kpi"><div class="v">{{ '{:,}'.format(t.views) }}</div><div class="l">Views</div></div><div class="card kpi"><div class="v">{{ t.posts }}</div><div class="l">Posts live</div></div>
+<div class="card kpi"><div class="v">{{ '{:,}'.format(t.likes) }}</div><div class="l">Likes</div></div><div class="card kpi"><div class="v">{{ t.drafts }}</div><div class="l">TikTok drafts waiting</div></div></div>
+<div class="grid g2" style="margin-top:14px">{% for title, rows in tables %}<div><div class="sec" style="margin-top:12px"><h2>{{ title }}</h2></div>
+<div class="card scroll"><table><tr><th></th><th class="num">Posts</th><th class="num">Views</th><th class="num">Avg</th><th style="width:28%"></th></tr>
+{% for r in rows %}<tr><td>{{ r.key }}</td><td class="num">{{ r.posts }}</td><td class="num">{{ '{:,}'.format(r.views) }}</td><td class="num">{{ '{:,}'.format(r.avg_views) }}</td><td><div class="bar"><i style="width:{{ r.pct }}%"></i></div></td></tr>
+{% else %}<tr><td colspan="5" class="empty">No data yet.</td></tr>{% endfor %}</table></div></div>{% endfor %}</div>
+<div class="sec"><h2>Posts</h2></div>
+<div class="card scroll"><table><tr><th>Clip</th><th>Platform</th><th>Source</th><th>Archetype</th><th class="num">Views</th><th class="num">Likes</th><th class="num">Comments</th><th class="num">Shares</th><th>Posted</th></tr>
+{% for r in rows %}<tr><td>{% if r.url %}<a href="{{ r.url }}" target="_blank" rel="noopener">{{ r.post_title }}</a>{% else %}{{ r.post_title }}{% endif %}</td><td>{{ r.platform }}</td><td>{{ r.source }}</td><td>{{ r.archetype }}</td>
+{% for k in ('views','likes','comments','shares') %}<td class="num">{{ '{:,}'.format(r[k]) if r[k] is not none else '–' }}</td>{% endfor %}<td class="mut small">{{ r.posted_at|ago }}</td></tr>
+{% else %}<tr><td colspan="9" class="empty">Nothing posted yet.</td></tr>{% endfor %}</table></div>
+{% endblock %}

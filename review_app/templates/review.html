@@ -1,0 +1,41 @@
+{% extends "base.html" %}{% block main %}
+<div class="top"><div><h1>Review</h1><p>Five agents check every clip before you see it. You make the call.</p></div></div>
+<div class="tabs">{% for s in statuses %}<a class="{{ 'on' if s == status }}" href="{{ url_for('review', status=s) }}">{{ s.replace('_',' ') }} {{ counts.get(s, '') }}</a>{% endfor %}</div>
+<div id="live"><div class="clips">
+{% for c in clips %}
+<article class="card clip">
+ {% if c.status in ('rendering','selected') %}<div class="busy">Rendering…<br>this refreshes when it is done</div>
+ {% elif c.file_path %}<video controls playsinline preload="none" poster="{{ url_for('media', clip_id=c.id, name='thumb.jpg', v=c.updated_at) }}" src="{{ url_for('media', clip_id=c.id, name='clip.mp4', v=c.updated_at) }}"></video>
+ {% else %}<div class="busy">No video file</div>{% endif %}
+ <div class="body">
+  <div class="rec {{ c.recommendation or '' }}">
+   {% if c.recommendation == 'ready' %}<span class="pill ok">Ready to approve</span>{% elif c.recommendation == 'needs_look' %}<span class="pill warn">Needs a look</span>{% elif c.recommendation == 'reject' %}<span class="pill bad">Agents say reject</span>{% else %}<span class="pill run">Agents checking</span>{% endif %}
+   {% if c.status in ('approved','rejected','failed') %}<span class="pill {{ 'ok' if c.status=='approved' else 'bad' }}">{{ c.status }}</span>{% endif %}
+   {% if c.reach_score is not none %}<span class="score">Reach {{ '%.0f'|format(c.reach_score) }}</span>{% endif %}</div>
+  <div class="row"><span class="pill plain">{{ c.source_name }}</span>
+   {% if c.postable %}<span class="pill ok">{{ c.permission }}</span>{% else %}<span class="pill bad">{{ c.permission }}: cannot post</span>{% endif %}
+   <span class="pill plain">{{ c.archetype }}</span><span class="pill plain">{{ '%.0f'|format(c.duration_s) }}s</span>
+   {% if c.spoiler_risk %}<span class="pill bad">spoiler risk</span>{% endif %}</div>
+  <div class="verdicts">{% for r in c.reviews %}<div><span class="pill {{ {'pass':'ok','warn':'warn','fail':'bad'}.get(r.verdict,'') }}">{{ r.title }}</span><span class="s">{{ r.summary }}</span></div>{% endfor %}</div>
+  {% if c.error %}<p style="color:var(--bad);margin:0;font-size:13.5px">{{ c.error }}</p>{% endif %}
+  <p class="mut small" style="margin:0">{{ c.why }} · {{ c.span }} · {{ c.caption_style }} · {{ c.layout_used }}</p>
+  {% if c.better_title and c.better_title != c.post_title %}<form class="sugg" method="post" action="{{ url_for('apply', clip_id=c.id) }}"><input type="hidden" name="status" value="{{ status }}"><input type="hidden" name="field" value="title"><span><b>Hook Critic's title:</b> {{ c.better_title }}</span><button class="sm">Use</button></form>{% endif %}
+  {% if c.better_hook and c.better_hook != c.hook_used %}<form class="sugg" method="post" action="{{ url_for('apply', clip_id=c.id) }}"><input type="hidden" name="status" value="{{ status }}"><input type="hidden" name="field" value="hook"><span><b>Hook Critic's hook:</b> {{ c.better_hook }}</span><button class="sm">Use</button></form>{% endif %}
+  <form method="post" action="{{ url_for('save', clip_id=c.id) }}" style="display:grid;gap:10px"><input type="hidden" name="status" value="{{ status }}">
+   <label>Title <input type="text" name="post_title" value="{{ c.post_title }}" maxlength="100"></label>
+   <label>Caption <textarea name="caption">{{ c.caption }}</textarea></label>
+   <label>On-screen hook (changing it re-renders)
+    <select name="hook_choice" onchange="this.form.hook_custom.hidden=this.value!='custom'">
+     <option value="a" {{ 'selected' if c.hook_used == c.hook_a }}>{{ c.hook_a }}</option>
+     {% if c.hook_b != c.hook_a %}<option value="b" {{ 'selected' if c.hook_used == c.hook_b and c.hook_used != c.hook_a }}>{{ c.hook_b }}</option>{% endif %}
+     <option value="custom" {{ 'selected' if c.hook_used not in (c.hook_a, c.hook_b) }}>Custom…</option></select>
+    <input type="text" name="hook_custom" value="{{ c.hook_used }}" maxlength="60" {{ 'hidden' if c.hook_used in (c.hook_a, c.hook_b) }}></label>
+   <button class="sm">Save text</button></form>
+  <form method="post" action="{{ url_for('recut', clip_id=c.id) }}"><input type="hidden" name="status" value="{{ status }}"><label>Re-cut</label>
+   <div class="four"><button class="sm" name="nudge" value="start:-2">Start −2s</button><button class="sm" name="nudge" value="start:2">Start +2s</button><button class="sm" name="nudge" value="end:-2">End −2s</button><button class="sm" name="nudge" value="end:2">End +2s</button></div></form>
+  <form method="post" action="{{ url_for('decide', clip_id=c.id) }}" class="two"><input type="hidden" name="status" value="{{ status }}">
+   <button class="danger" name="decision" value="rejected">Reject</button>
+   <button class="good" name="decision" value="approved" {% if c.confirm %}onclick="return confirm('{{ c.confirm }}')"{% endif %}>Approve</button></form>
+ </div></article>
+{% else %}<p class="empty" style="grid-column:1/-1">Nothing here.</p>{% endfor %}
+</div></div>{% endblock %}

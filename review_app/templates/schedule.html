@@ -1,0 +1,18 @@
+{% extends "base.html" %}{% block main %}
+<div class="top"><div><h1>Schedule</h1><p>Times are {{ tz }}. The Timing Planner spaces posts {{ stagger[0] }}–{{ stagger[1] }} min apart between {{ hours[0] }}:00 and {{ hours[1] }}:00, highest reach first.</p></div></div>
+<div id="live">
+<div class="grid g3">{% for p in platforms %}<div class="card"><div class="row"><h2 style="flex:1">{{ p.label }}</h2><span class="pill {{ 'ok' if p.connected else '' }}">{{ 'connected' if p.connected else 'not connected' }}</span></div>
+<p class="mut small" style="margin:8px 0 6px">{{ p.today }} of {{ p.cap }} today</p><div class="bar"><i style="width:{{ [100, 100 * p.today / p.cap]|min }}%"></i></div></div>{% endfor %}</div>
+<div class="sec"><h2>Upcoming</h2></div>
+<div class="card scroll"><table><tr><th>When</th><th>Platform</th><th>Clip</th><th class="num">Reach</th><th>Status</th><th></th></tr>
+{% for p in upcoming %}<tr><td>{{ p.local }}<div class="mut small">{{ p.rel }}</div></td><td>{{ p.platform }}{% if p.privacy %}<div class="mut small">{{ p.privacy }}</div>{% endif %}</td><td>{{ p.post_title }}<div class="mut small">{{ p.source }} · clip {{ p.clip_id }}</div>{% if p.error %}<div class="small" style="color:var(--warn)">{{ p.error }}</div>{% endif %}</td>
+<td class="num">{{ '%.0f'|format(p.reach_score) if p.reach_score is not none else '–' }}</td><td><span class="pill {{ 'run' if p.status=='uploading' else 'info' }}">{{ p.status }}</span></td>
+<td><form method="post" action="{{ url_for('post_action', post_id=p.id) }}" class="row"><button class="sm" name="action" value="now">Post now</button><button class="sm" name="action" value="earlier">−1h</button><button class="sm" name="action" value="later">+1h</button><button class="sm danger" name="action" value="cancel">Cancel</button></form></td></tr>
+{% else %}<tr><td colspan="6" class="empty">Nothing scheduled. Approve clips from a permitted source and connect a platform.</td></tr>{% endfor %}</table></div>
+<div class="sec"><h2>History</h2></div>
+<div class="card scroll"><table><tr><th>When</th><th>Platform</th><th>Clip</th><th>Status</th><th class="num">Views</th><th></th></tr>
+{% for p in history %}<tr><td>{{ p.local }}</td><td>{{ p.platform }}</td><td>{% if p.url %}<a href="{{ p.url }}" target="_blank" rel="noopener">{{ p.post_title }}</a>{% else %}{{ p.post_title }}{% endif %}{% if p.error %}<div class="small" style="color:var(--bad)">{{ p.error }}</div>{% endif %}{% if p.status == 'draft_sent' %}<div class="small mut">Open TikTok → Inbox to finish posting</div>{% endif %}</td>
+<td><span class="pill {{ {'posted':'ok','draft_sent':'warn','failed':'bad'}.get(p.status,'') }}">{{ p.status.replace('_',' ') }}</span></td><td class="num">{{ '{:,}'.format(p.views) if p.views is not none else '–' }}</td>
+<td>{% if p.status in ('failed','cancelled') %}<form method="post" action="{{ url_for('post_action', post_id=p.id) }}"><button class="sm" name="action" value="retry">Retry</button></form>{% endif %}</td></tr>
+{% else %}<tr><td colspan="6" class="empty">No posts yet.</td></tr>{% endfor %}</table></div>
+</div>{% endblock %}

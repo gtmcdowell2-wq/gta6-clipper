@@ -1,0 +1,8 @@
+{% extends "base.html" %}{% block main %}
+<div class="top"><div><h1>Sources</h1><p>Edit <code>sources.yaml</code> and restart to change these. Only <b>campaign</b> and <b>public_ok</b> sources are watched and posted.</p></div></div>
+<div class="card scroll"><table><tr><th>Streamer</th><th>Platform</th><th>Permission</th><th>Campaign text</th><th class="num">Chunks</th><th class="num">Clips</th><th class="num">Posted</th><th>Last checked</th></tr>
+{% for s in sources %}<tr><td><a href="{{ s.url }}" target="_blank" rel="noopener">{{ s.name }}</a>{% if not s.active %} <span class="mut small">(not in sources.yaml)</span>{% endif %}</td><td>{{ s.platform }}</td>
+<td><span class="pill {{ 'ok' if s.postable else 'bad' }}">{{ s.permission }}</span></td><td class="mut small">{{ s.caption_suffix or '–' }}</td>
+<td class="num">{{ s.vods }}</td><td class="num">{{ s.clips }}</td><td class="num">{{ s.posted }}</td><td class="mut small">{{ s.last_checked|ago }}</td></tr>{% endfor %}</table></div>
+<div class="alert info" style="margin-top:16px"><b>Before changing a permission:</b> join the streamer's actual campaign (Whop Content Rewards or similar), read its brief, and copy the required credit, hashtags and paid-partnership disclosure into <code>caption_suffix</code>. The Policy Guard adds that text to every caption and checks it is still there.</div>
+{% endblock %}

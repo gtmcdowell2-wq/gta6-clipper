@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% block main %}
+<div class="top"><div><h1>Agents</h1><p>{{ agents|length }} agents in {{ crews|length }} crews. Each has one job. None of them can post a clip you have not approved.</p></div><div class="sp"></div>
+<form method="post" action="{{ url_for('agents_all', action='pause') }}"><button>Pause all</button></form>
+<form method="post" action="{{ url_for('agents_all', action='resume') }}"><button class="pri">Resume all</button></form></div>
+<div id="live">
+{% if not network_on %}<div class="alert">The agent network is not running in this process. Start it with <code>run_pipeline.py start</code>.</div>{% endif %}
+{% for crew_id, crew_name in crews.items() %}
+<div class="sec"><h2>{{ crew_name }}</h2></div>
+<div class="grid g3">{% for a in agents if a.crew == crew_id %}
+<div class="card agent {{ 'off' if not a.enabled }}">
+ <div class="hd"><h3>{{ a.title }}</h3><span class="pill {{ a.cls }}">{{ a.state }}</span></div>
+ <p class="job">{{ a.job }}</p>
+ {% if a.last_message %}<p class="last">{{ a.last_message }}</p>{% endif %}
+ <div class="meta">{{ a.runs }} runs · {{ a.failures }} errors · last worked {{ a.last_work_at|ago }} · checked {{ a.last_run_at|ago }}</div>
+ <div class="row"><form method="post" action="{{ url_for('agent_action', name=a.name, action='run') }}"><button class="sm">Run now</button></form>
+ <form method="post" action="{{ url_for('agent_action', name=a.name, action='toggle') }}"><button class="sm">{{ 'Pause' if a.enabled else 'Resume' }}</button></form>
+ <a class="btn sm" href="{{ url_for('agents_page', agent=a.name) }}#log">Log</a></div>
+</div>{% endfor %}</div>{% endfor %}
+<div class="sec" id="log"><h2>Activity log {% if only %}<small>· {{ only }}</small>{% endif %}</h2><div class="sp"></div>{% if only %}<a class="btn sm" href="{{ url_for('agents_page') }}#log">Show all</a>{% endif %}</div>
+<div class="card"><div class="feed">{% for e in events %}<div class="{{ e.level }}"><span class="t">{{ e.ts|ago }}</span><span class="a">{{ e.title }}</span><span class="m">{{ e.message.split('\n')[0] }}</span></div>{% else %}<p class="empty">No activity yet.</p>{% endfor %}</div></div>
+</div>{% endblock %}
