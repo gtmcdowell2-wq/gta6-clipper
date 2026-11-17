@@ -2,7 +2,8 @@
 
     python -m tests.test_network
 
-Needs at least one rendered clip in data/ (run `process` once first). Touches nothing in data/.
+Uses a copy of data/clipper.db when it holds 3+ rendered clips; otherwise (a fresh clone) it renders
+3 synthetic clips with ffmpeg. Touches nothing in data/.
 """
 from __future__ import annotations
 
@@ -14,6 +15,51 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+def _rendered_clips(db: Path) -> int:
+    import sqlite3
+    c = sqlite3.connect(db)
+    try:
+        paths = [r[0] for r in c.execute("SELECT file_path FROM clips WHERE file_path IS NOT NULL")]
+    except sqlite3.Error:
+        return 0
+    finally:
+        c.close()
+    return sum(Path(p).exists() for p in paths)
+
+
+def _seed_synthetic(conn, tmp: Path) -> None:
+    """Three 20s 1080x1920 clips with a tone, a transcript, and the rows the agents expect."""
+    import json
+    import subprocess
+    src = conn.execute("SELECT id FROM sources WHERE key LIKE '%:kaicenat'").fetchone()[0]
+    vdir = tmp / "vod"
+    vdir.mkdir()
+    line = "no way he actually pulled that off chat is going crazy right now".split()
+    segs = [{"start": 100 * c + 0.5, "end": 100 * c + 10, "text": " ".join(line),
+             "words": [{"word": w, "start": 100 * c + 0.5 + k * 0.6, "end": 100 * c + 0.9 + k * 0.6} for k, w in enumerate(line)]}
+            for c in (1, 2, 3)]
+    (vdir / "transcript.json").write_text(json.dumps({"segments": segs}))
+    conn.execute("INSERT INTO vods (id, source_id, platform_id, url, title, status, transcript_path) VALUES (1,?,?,?,?,?,?)",
+                 (src, "test", "https://www.twitch.tv/videos/0", "test stream", "done", str(vdir / "transcript.json")))
+    titles = ["He pulled off the impossible heist escape", "Chat could not believe this getaway drive",
+              "The worst parking job in Vice City history"]
+    for i, (title, style) in enumerate(zip(titles, ("bold_yellow", "comic", "clean")), start=1):
+        out = tmp / f"clip{i}.mp4"
+        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                        "-f", "lavfi", "-i", f"testsrc2=size=1080x1920:rate=30:duration=20",
+                        "-f", "lavfi", "-i", f"sine=frequency={300 + 100 * i}:duration=20",
+                        "-af", "volume=6dB", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac",
+                        "-shortest", str(out)], check=True)
+        conn.execute(
+            "INSERT INTO clips (id, vod_id, segments, start_s, end_s, duration_s, archetype, working_title, hook_a, hook_b, hook_used,"
+            " post_title, caption, score_hook, score_retention, score_shareability, score_overall, why, caption_style, layout_used,"
+            " file_path, status) VALUES (?,1,?,?,?,20,?,?,?,?,?,?,?,8,7,7,8,?,?,?,?,'pending_review')",
+            (i, json.dumps([{"start": 100 * i, "end": 100 * i + 20, "verbatim_text": "no way"}]), 100 * i, 100 * i + 20,
+             ("HYPE", "COMEDY", "FAIL")[i - 1], title, f"Hook {i} A", f"Hook {i} B", f"Hook {i} A", title,
+             f"Caption {i} #GTA6", "synthetic", style, "gameplay", str(out)))
+    conn.commit()
 
 
 def main() -> int:
@@ -38,9 +84,6 @@ def main() -> int:
 
     real = yaml.safe_load((ROOT / "config.yaml").read_text(encoding="utf-8"))
     src_db = ROOT / real["paths"]["db"]
-    if not src_db.exists():
-        print("no database yet: run the pipeline once first")
-        return 1
     real["paths"]["db"] = str(tmp / "test.db")
     real["posting"]["active_hours"] = [0, 24]
     (tmp / "config.yaml").write_text(yaml.safe_dump(real), encoding="utf-8")
@@ -49,12 +92,17 @@ def main() -> int:
         if s["handle"] == "kaicenat":
             s.update(permission="campaign", campaign="test-campaign", caption_suffix="Clipped from @kaicenat #ad")
     (tmp / "sources.yaml").write_text(yaml.safe_dump(src), encoding="utf-8")
-    seed = connect(src_db)
-    seed.execute("VACUUM INTO ?", (str(tmp / "test.db"),))
-    seed.close()
+    use_real = src_db.exists() and _rendered_clips(src_db) >= 3
+    if use_real:
+        seed = connect(src_db)
+        seed.execute("VACUUM INTO ?", (str(tmp / "test.db"),))
+        seed.close()
 
     cfg = load_config(tmp / "config.yaml", tmp / "sources.yaml")
     conn = init_db(cfg)
+    if not use_real:
+        print("No real clips found: rendering 3 synthetic clips")
+        _seed_synthetic(conn, tmp)
     conn.executescript("DELETE FROM posts; DELETE FROM post_stats; DELETE FROM reviews; DELETE FROM agent_events; DELETE FROM agents;"
                        "UPDATE clips SET status='pending_review', recommendation=NULL, reach_score=NULL WHERE file_path IS NOT NULL;")
     conn.commit()
