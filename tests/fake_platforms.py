@@ -19,6 +19,9 @@ class State:
         self.yt = {"received": bytearray(), "size": 0, "interrupt_once": True}
         self.tt = {"size": 0, "chunk": 0, "count": 0, "next": 0, "posted": False}
         self.ig = {"polls": 0, "bytes": 0, "size": 0}
+        self.thumbs: list[str] = []
+        self.llm = {"overload_model": None, "calls": [], "images": 0}
+        self.ntfy: list[dict] = []
 
 
 def serve() -> tuple[http.server.HTTPServer, State]:
@@ -67,13 +70,17 @@ def serve() -> tuple[http.server.HTTPServer, State]:
             if p == "/youtube/v3/channels":
                 return self.reply(200, {"items": [{"snippet": {"title": "Test Clips Channel"}}]})
             if p == "/upload/youtube/v3/videos" and self.command == "POST":
-                self.need(q.get("uploadType") == "resumable" and q.get("part") == "snippet,status", "query params")
+                self.need(q.get("uploadType") == "resumable" and q.get("part") == "snippet,status,paidProductPlacementDetails", f"query params {q.get('part')}")
                 self.need(auth == "Bearer yt-access-2", f"auth header {auth!r}")
                 self.need(self.headers.get("X-Upload-Content-Type") == "video/mp4", "X-Upload-Content-Type")
                 st.yt["size"] = int(self.headers.get("X-Upload-Content-Length") or 0)
                 self.need(st.yt["size"] > 0, "X-Upload-Content-Length")
                 self.need(len(js.get("snippet", {}).get("title", "")) <= 100 and js["snippet"].get("categoryId") == "20", "snippet")
                 self.need(js.get("status", {}).get("privacyStatus") in ("private", "public", "unlisted"), "privacyStatus")
+                # Since 2026-11-16 an unspecified paid-placement flag no longer means "none": it must be explicit.
+                self.need(isinstance(js.get("paidProductPlacementDetails", {}).get("hasPaidProductPlacement"), bool),
+                          "paidProductPlacementDetails.hasPaidProductPlacement must be set explicitly")
+                self.need(js.get("status", {}).get("containsSyntheticMedia") is False, "containsSyntheticMedia must be false")
                 st.yt["meta"] = js
                 host = self.headers["Host"]
                 return self.reply(200, None, {"Location": f"http://{host}/upload/youtube/session?upload_id=abc"})
@@ -92,9 +99,51 @@ def serve() -> tuple[http.server.HTTPServer, State]:
                 st.yt["received"] += body
                 self.need(len(st.yt["received"]) == st.yt["size"], "total bytes after resume")
                 return self.reply(200, {"id": "ytVIDEO123"})
+            if p == "/youtube/v3/videos" and q.get("chart") == "mostPopular":
+                self.need(q.get("videoCategoryId") == "20" and q.get("part") == "snippet", "trending params")
+                return self.reply(200, {"items": [{"snippet": {"title": f"GTA 6 police chase insane {i}", "tags": ["gta 6", "police chase"]}} for i in range(5)]})
+            if p == "/youtube/v3/videos" and "processingDetails" in q.get("part", ""):
+                return self.reply(200, {"items": [{"id": q["id"], "processingDetails": {"processingStatus": "succeeded"}, "status": {"uploadStatus": "processed"}}]})
+            if p == "/upload/youtube/v3/thumbnails/set":
+                self.need(q.get("videoId") and self.headers.get("Content-Type") == "image/jpeg" and body[:2] == b"\xff\xd8", "thumbnail upload")
+                st.thumbs.append(q.get("videoId"))
+                return self.reply(200, {"kind": "youtube#thumbnailSetResponse", "items": [{}]})
+            if p == "/ntfy":
+                self.need(js.get("topic") and js.get("title") and js.get("message") is not None and isinstance(js.get("priority"), int), "ntfy JSON publish")
+                st.ntfy.append(js)
+                return self.reply(200, {"id": "n1"})
             if p == "/youtube/v3/videos":
                 self.need(q.get("part") == "statistics", "part")
                 return self.reply(200, {"items": [{"id": i, "statistics": {"viewCount": "12345", "likeCount": "678", "commentCount": "9"}} for i in q["id"].split(",")]})
+
+            # ---------------- Anthropic Messages API (what clipper/llm.py sends)
+            if p == "/v1/messages":
+                model = js.get("model")
+                st.llm["calls"].append(model)
+                self.need(self.headers.get("x-api-key") == "test-key" or auth == "Bearer test-key", "API key header")
+                self.need("server-side-fallback-2026-07-01" in (self.headers.get("anthropic-beta") or ""), "fallback beta header")
+                self.need(js.get("fallbacks") == "default", "fallbacks='default'")
+                self.need(js.get("thinking") == {"type": "adaptive"}, f"thinking {js.get('thinking')}")
+                self.need((js.get("output_config") or {}).get("effort") in ("low", "medium", "high"), "output_config.effort")
+                self.need("temperature" not in js and "budget_tokens" not in json.dumps(js.get("thinking")), "no sampling params / budgets")
+                system = js.get("system") or [{}]
+                self.need(system[0].get("cache_control") == {"type": "ephemeral"}, "system prompt cached")
+                content = js["messages"][0]["content"]
+                if isinstance(content, list):
+                    st.llm["images"] += sum(1 for b in content if b.get("type") == "image")
+                if model == st.llm["overload_model"]:
+                    return self.reply(529, {"type": "error", "error": {"type": "overloaded_error", "message": "Overloaded"}},
+                                      {"x-should-retry": "false"})
+                if isinstance(content, list):  # frames attached: the Visual Judge
+                    answer = {"mostly_cutscene": False, "graphic_opening": False, "not_gta": False, "issues": [], "best_cover_frame": 2}
+                else:
+                    answer = {"hook_score": 8, "title_score": 7, "context_independent": True, "misleading_title": False,
+                              "violence_in_first_7s": False, "spoiler": False, "issues": [], "better_title": "Better title",
+                              "better_hook": "Better hook"}
+                return self.reply(200, {"id": "msg_1", "type": "message", "role": "assistant", "model": model,
+                                        "content": [{"type": "text", "text": json.dumps(answer)}], "stop_reason": "end_turn",
+                                        "stop_sequence": None, "usage": {"input_tokens": 1200, "output_tokens": 300,
+                                        "cache_read_input_tokens": 0, "cache_creation_input_tokens": 800}})
 
             # ---------------- TikTok
             if p == "/v2/oauth/token/":

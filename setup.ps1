@@ -65,6 +65,21 @@ if (-not (Test-Path "tools\TwitchDownloaderCLI.exe")) {
 
 if (-not (Test-Path ".env")) { Copy-Item ".env.example" ".env" }
 
+# A desktop shortcut that opens Clip Control in its own window (no console; logs go to data\logs).
+try {
+    $desktop = [Environment]::GetFolderPath("Desktop")
+    $ws = New-Object -ComObject WScript.Shell
+    $lnk = $ws.CreateShortcut((Join-Path $desktop "Clip Control.lnk"))
+    $lnk.TargetPath = (Resolve-Path ".venv\Scripts\pythonw.exe").Path
+    $lnk.Arguments = "run_pipeline.py app"
+    $lnk.WorkingDirectory = $PSScriptRoot
+    $lnk.Description = "Clip Control: the GTA 6 clipping agents"
+    $lnk.Save()
+    Write-Host "Desktop shortcut created: Clip Control"
+} catch { Write-Host "Could not create the desktop shortcut ($_); use run_pipeline.py app instead." }
+
 & .\.venv\Scripts\python.exe run_pipeline.py doctor
 Write-Host ""
-Write-Host "Next: put your keys in .env, then run:  .\.venv\Scripts\python.exe run_pipeline.py start"
+Write-Host "Next: put your keys in .env, then double-click 'Clip Control' on the desktop"
+Write-Host "      (or run:  .\.venv\Scripts\python.exe run_pipeline.py app)"
+Write-Host "To start it with Windows: press Win+R, type shell:startup, and copy the shortcut into that folder."

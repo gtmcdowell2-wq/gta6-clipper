@@ -5,6 +5,10 @@ Checked against Google's docs on 2026-11-16:
 - Since 2026-11-02, uploads from unaudited API projects are no longer forced to private.
 - A vertical video up to 3 minutes is treated as a Short; no #Shorts tag is needed.
 - Desktop OAuth uses a loopback redirect (http://127.0.0.1:port) with PKCE.
+Re-checked 2026-11-18 (revision history):
+- Since 2026-11-16, paidProductPlacementDetails.hasPaidProductPlacement no longer defaults to false. Every upload
+  now states it explicitly: true for paid campaign clips, false otherwise.
+- Since 2026-11-03, thumbnails.set works for Shorts once processing has finished (about 50 quota units per call).
 """
 from __future__ import annotations
 
@@ -69,6 +73,13 @@ def exchange_code(conn, code: str, verifier: str, redirect_uri: str) -> str:
     return name
 
 
+def _field(post, name: str):
+    try:
+        return post[name]
+    except (KeyError, IndexError, TypeError):
+        return None
+
+
 class YouTubePoster(Poster):
     platform, label = "youtube", "YouTube Shorts"
 
@@ -120,13 +131,18 @@ class YouTubePoster(Poster):
         path = Path(clip["file_path"])
         size = path.stat().st_size
         clean = lambda s: (s or "").replace("<", "").replace(">", "")
-        body = {"snippet": {"title": clean(clip["post_title"])[:100], "description": clean(clip["caption"])[:4900],
+        title = clean(_field(post, "title") or clip["post_title"])[:100]
+        description = clean(_field(post, "caption") or clip["caption"])[:4900]
+        paid = self.paid_placement(clip)
+        body = {"snippet": {"title": title, "description": description,
                             "tags": yt.get("tags", []), "categoryId": str(yt.get("category_id", "20"))},
                 "status": {"privacyStatus": post["privacy"] or yt.get("privacy_status", "private"),
-                           "selfDeclaredMadeForKids": False}}
+                           "selfDeclaredMadeForKids": False,
+                           "containsSyntheticMedia": False},  # real stream footage, never AI-generated
+                "paidProductPlacementDetails": {"hasPaidProductPlacement": paid}}
         try:
             start = http("POST", f"{_api()}/upload/youtube/v3/videos", what="YouTube upload start",
-                         params={"uploadType": "resumable", "part": "snippet,status"},
+                         params={"uploadType": "resumable", "part": "snippet,status,paidProductPlacementDetails"},
                          headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json; charset=UTF-8",
                                   "X-Upload-Content-Length": str(size), "X-Upload-Content-Type": "video/mp4"},
                          data=json.dumps(body).encode("utf-8"))
@@ -166,6 +182,40 @@ class YouTubePoster(Poster):
             rng = q.headers.get("Range")
             offset = int(rng.rsplit("-", 1)[1]) + 1 if rng else 0
         raise PostError(f"YouTube upload kept failing: {last_error}")
+
+    def paid_placement(self, clip) -> bool:
+        """youtube.paid_product_placement: 'campaign' (paid campaign clips say yes), true or false."""
+        setting = self.cfg["youtube"].get("paid_product_placement", "campaign")
+        if isinstance(setting, bool):
+            return setting
+        try:
+            permission = clip["permission"]
+        except (KeyError, IndexError):
+            permission = None
+        return permission == "campaign"
+
+    def most_popular_gaming(self, region: str = "US") -> list[dict]:
+        """Trending gaming videos (1 quota unit)."""
+        r = http("GET", f"{_api()}/youtube/v3/videos", what="YouTube trending",
+                 params={"part": "snippet", "chart": "mostPopular", "videoCategoryId": "20", "regionCode": region, "maxResults": 50},
+                 headers={"Authorization": f"Bearer {self._token()}"})
+        return [{"title": i["snippet"].get("title"), "tags": i["snippet"].get("tags", [])} for i in r.json().get("items", [])]
+
+    def processing_status(self, video_id: str) -> str | None:
+        """'succeeded', 'processing', 'failed', 'terminated', or None if YouTube didn't say (1 quota unit)."""
+        r = http("GET", f"{_api()}/youtube/v3/videos", what="YouTube processing status",
+                 params={"part": "processingDetails,status", "id": video_id}, headers={"Authorization": f"Bearer {self._token()}"})
+        items = r.json().get("items") or []
+        if not items:
+            return None
+        return (items[0].get("processingDetails") or {}).get("processingStatus") or (
+            "succeeded" if (items[0].get("status") or {}).get("uploadStatus") == "processed" else None)
+
+    def set_thumbnail(self, video_id: str, image: Path) -> None:
+        """Custom Shorts thumbnail; YouTube crops it to 9:16 (about 50 quota units)."""
+        http("POST", f"{_api()}/upload/youtube/v3/thumbnails/set", what="YouTube thumbnail",
+             params={"videoId": video_id, "uploadType": "media"},
+             headers={"Authorization": f"Bearer {self._token()}", "Content-Type": "image/jpeg"}, data=image.read_bytes())
 
     def get_stats(self, posts):
         token = self._token()

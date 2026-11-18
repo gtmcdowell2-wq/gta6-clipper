@@ -46,7 +46,7 @@ td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}tr:la
 .clip{padding:0;overflow:hidden;display:flex;flex-direction:column}.clip video,.clip .busy{width:100%;aspect-ratio:9/16;max-height:66vh;background:#000;display:block;object-fit:contain}
 .clip .busy{display:grid;place-items:center;color:#aaa;text-align:center;padding:20px}.clip .body{padding:14px;display:grid;gap:11px}
 .rec{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:var(--panel2);font-weight:600}
-.rec .score{margin-left:auto;font-variant-numeric:tabular-nums}.rec.ready{box-shadow:inset 3px 0 0 var(--ok)}.rec.needs_look{box-shadow:inset 3px 0 0 var(--warn)}.rec.reject{box-shadow:inset 3px 0 0 var(--bad)}
+.rec .score{margin-left:auto;font-variant-numeric:tabular-nums}.rec.ready{box-shadow:inset 3px 0 0 var(--ok)}.rec.needs_look{box-shadow:inset 3px 0 0 var(--warn)}.rec.reject,.rec.blocked{box-shadow:inset 3px 0 0 var(--bad)}
 .verdicts{display:grid;gap:6px;font-size:13px}.verdicts div{display:grid;grid-template-columns:128px 1fr;gap:8px;align-items:start}.verdicts .s{color:var(--mut);overflow-wrap:anywhere}
 label{font-size:12.5px;color:var(--mut);display:grid;gap:4px}
 input[type=text],textarea,select{width:100%;font:inherit;color:var(--fg);background:#0e1015;border:1px solid var(--line);border-radius:9px;padding:9px 10px}

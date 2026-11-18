@@ -4,12 +4,13 @@
 <form method="post" action="{{ url_for('agents_all', action='resume') }}"><button class="pri">Resume all</button></form></div>
 <div id="live">
 {% if not network_on %}<div class="alert">The agent network is not running in this process. Start it with <code>run_pipeline.py start</code>.</div>{% endif %}
-{% for crew_id, crew_name in crews.items() %}
-<div class="sec"><h2>{{ crew_name }}</h2></div>
+{% for crew_id, crew in crews.items() %}
+<div class="sec"><h2>{{ crew[0] }} <small>· {{ crew[1] }} · {{ agents|selectattr('crew', 'equalto', crew_id)|list|length }} agents</small></h2></div>
 <div class="grid g3">{% for a in agents if a.crew == crew_id %}
 <div class="card agent {{ 'off' if not a.enabled }}">
  <div class="hd"><h3>{{ a.title }}</h3><span class="pill {{ a.cls }}">{{ a.state }}</span></div>
  <p class="job">{{ a.job }}</p>
+ {% if a.backup %}<p class="job small"><b style="color:var(--fg);font-weight:600">Backup:</b> {{ a.backup }}</p>{% endif %}
  {% if a.last_message %}<p class="last">{{ a.last_message }}</p>{% endif %}
  <div class="meta">{{ a.runs }} runs · {{ a.failures }} errors · last worked {{ a.last_work_at|ago }} · checked {{ a.last_run_at|ago }}</div>
  <div class="row"><form method="post" action="{{ url_for('agent_action', name=a.name, action='run') }}"><button class="sm">Run now</button></form>

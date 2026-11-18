@@ -29,7 +29,7 @@ class Source:
     permission: str = "unknown"
     layout: str = "auto"
     cam: list[int] | None = None
-    campaign: str | None = None
+    campaign: str | dict | None = None   # a name, or the campaign brief as a mapping (see sources.yaml)
     caption_suffix: str | None = None  # campaign-required credit, hashtags or paid disclosure
     notes: str | None = None
     live_marathon: bool = False
@@ -37,6 +37,26 @@ class Source:
     @property
     def key(self) -> str:
         return f"{self.platform}:{self.handle}"
+
+    @property
+    def campaign_name(self) -> str | None:
+        if isinstance(self.campaign, dict):
+            return str(self.campaign.get("name") or "campaign")
+        return self.campaign
+
+    @property
+    def brief(self) -> dict:
+        """The campaign brief with defaults filled in. Empty when there is no campaign."""
+        if not self.campaign:
+            return {}
+        b = dict(self.campaign) if isinstance(self.campaign, dict) else {"name": self.campaign}
+        b.setdefault("submit_within_minutes", 30)   # Content Rewards: submit within 30 min of posting
+        b.setdefault("platforms", ["youtube", "tiktok", "instagram"])
+        b.setdefault("required_text", [])
+        b.setdefault("required_tags", [])
+        b.setdefault("banned", [])
+        b.setdefault("disclosure", "#ad")             # FTC: paid clips say so, at the start of the clip
+        return b
 
 
 @dataclass
@@ -46,6 +66,12 @@ class Config:
 
     def __getitem__(self, section: str) -> dict[str, Any]:
         return self.raw[section]
+
+    def get(self, section: str, default=None):
+        return self.raw.get(section, default if default is not None else {})
+
+    def source(self, key: str) -> Source | None:
+        return next((s for s in self.sources if s.key == key), None)
 
     @property
     def data_dir(self) -> Path:
@@ -102,6 +128,15 @@ def load_sources(path: Path) -> list[Source]:
             raise ConfigError(f"{where}: layout must be one of {LAYOUTS}")
         if s.cam is not None and (len(s.cam) != 4 or not all(isinstance(v, int) for v in s.cam)):
             raise ConfigError(f"{where}: cam must be [x, y, w, h] integers")
+        if s.campaign is not None and not isinstance(s.campaign, (str, dict)):
+            raise ConfigError(f"{where}: campaign must be a name or a mapping")
+        if isinstance(s.campaign, dict):
+            for k in ("cpm", "cap_per_clip", "budget", "submit_within_minutes", "min_seconds", "max_seconds"):
+                if k in s.campaign and s.campaign[k] is not None and not isinstance(s.campaign[k], (int, float)):
+                    raise ConfigError(f"{where}: campaign.{k} must be a number")
+            for k in ("platforms", "required_text", "required_tags", "banned"):
+                if k in s.campaign and not isinstance(s.campaign[k], list):
+                    raise ConfigError(f"{where}: campaign.{k} must be a list")
         if s.key in seen:
             raise ConfigError(f"{where}: duplicate source {s.key}")
         seen.add(s.key)

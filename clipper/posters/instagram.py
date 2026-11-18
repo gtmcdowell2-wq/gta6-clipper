@@ -26,6 +26,13 @@ def _graph() -> str:
     return os.environ.get("IG_GRAPH_BASE", "https://graph.facebook.com")
 
 
+def _post_caption(post):
+    try:
+        return post["caption"]
+    except (KeyError, IndexError, TypeError):
+        return None
+
+
 class InstagramPoster(Poster):
     platform, label = "instagram", "Instagram Reels"
 
@@ -80,7 +87,7 @@ class InstagramPoster(Poster):
         path = Path(clip["file_path"])
         size = path.stat().st_size
         r = http("POST", f"{self._base()}/{ig}/media", what="Instagram container", headers=auth,
-                 json={"media_type": "REELS", "upload_type": "resumable", "caption": (clip["caption"] or clip["post_title"] or "")[:2200]})
+                 json={"media_type": "REELS", "upload_type": "resumable", "caption": (_post_caption(post) or clip["caption"] or clip["post_title"] or "")[:2200]})
         container = r.json()
         container_id, uri = container["id"], container["uri"]
         with path.open("rb") as f:

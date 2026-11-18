@@ -14,12 +14,16 @@ from .layout import plan_segment
 from .util import ffprobe, log, run
 
 
+CPU_ENCODER = ["-c:v", "libx264", "-preset", "medium", "-crf", "20", "-maxrate", "14M", "-bufsize", "28M", "-profile:v", "high"]
+
+
 @functools.lru_cache(maxsize=1)
 def _video_encoder() -> list[str]:
     from .doctor import nvenc_works
     if shutil.which("nvidia-smi") and nvenc_works():
-        return ["-c:v", "h264_nvenc", "-preset", "p5", "-rc", "vbr", "-cq", "21", "-b:v", "0", "-maxrate", "14M", "-bufsize", "28M"]
-    return ["-c:v", "libx264", "-preset", "medium", "-crf", "20", "-maxrate", "14M", "-bufsize", "28M"]
+        return ["-c:v", "h264_nvenc", "-preset", "p5", "-rc", "vbr", "-cq", "21", "-b:v", "0", "-maxrate", "14M", "-bufsize", "28M",
+                "-profile:v", "high"]
+    return CPU_ENCODER
 
 
 def _pane_filters(layout: dict, src: tuple[int, int], out: tuple[int, int], cam_h: int, k: int, pane_aspect: float) -> str:
@@ -51,6 +55,65 @@ def _pane_filters(layout: dict, src: tuple[int, int], out: tuple[int, int], cam_
             f"boxblur=8:2,scale={W}:{H},eq=brightness=-0.12,setsar=1[bb{k}];"
             f"[fg{k}]crop={fw}:{sh}:{fx}:0,scale={W}:{fg_h}:flags=bicubic,setsar=1[ff{k}];"
             f"[bb{k}][ff{k}]overlay=0:(H-h)/2[v{k}]")
+
+
+def _loud_moments(conn: sqlite3.Connection, clip: sqlite3.Row, geometry: list[dict]) -> list[dict]:
+    """Loudness peaks inside the clip from the chunk's 16 kHz audio.wav (written by the transcriber)."""
+    import wave
+
+    import numpy as np
+    vod = conn.execute("SELECT video_path, transcript_path FROM vods WHERE id=?", (clip["vod_id"],)).fetchone()
+    folder = Path(vod["video_path"] or vod["transcript_path"] or ".").parent
+    wav = folder / "audio.wav"
+    if not wav.exists():
+        return []
+    out = []
+    try:
+        with wave.open(str(wav)) as w:
+            rate = w.getframerate()
+            for g in geometry:
+                w.setpos(int(g["src_start"] * rate))
+                x = np.frombuffer(w.readframes(int((g["src_end"] - g["src_start"]) * rate)), dtype=np.int16).astype(np.float32)
+                hop = rate // 10
+                n = len(x) // hop
+                if n < 10:
+                    continue
+                rms = np.sqrt((x[: n * hop].reshape(n, hop) ** 2).mean(axis=1) + 1e-9)
+                db = 20 * np.log10(rms / 32768 + 1e-9)
+                base = float(np.median(db))
+                for i in np.argsort(db)[::-1][:12]:
+                    if db[i] - base >= 9:  # clearly louder than the stream around it: a scream, a crash, a cheer
+                        out.append({"t": g["src_start"] + i / 10, "intensity": round(float(db[i] - base), 1)})
+    except (wave.Error, EOFError, ValueError):
+        return []
+    return out
+
+
+def _punch_ins(conn: sqlite3.Connection, clip: sqlite3.Row, geometry: list[dict], duration: float, ed: dict) -> list[tuple[float, float]]:
+    """Up to two short zoom-ins on the loudest reaction spikes (a staple of streamer clips), on output time."""
+    mode = ed.get("punch_in", "rotate")
+    if mode == "off" or (mode == "rotate" and clip["id"] % 3 == 1) or not clip["candidate_id"]:
+        return []
+    row = conn.execute("SELECT signals, peak_s FROM candidates WHERE id=?", (clip["candidate_id"],)).fetchone()
+    spikes = (json.loads(row["signals"] or "{}").get("audio_spikes", []) if row else [])
+    if not spikes:  # backup: the loudest moments straight from the audio, then the candidate's own peak
+        spikes = _loud_moments(conn, clip, geometry)
+        if not spikes and row and row["peak_s"] is not None:
+            spikes = [{"t": row["peak_s"], "intensity": 1}]
+    hold = float(ed.get("punch_seconds", 0.7))
+    out: list[tuple[float, float]] = []
+    for spike in sorted(spikes, key=lambda s: -float(s.get("intensity", 0))):
+        t_src = float(spike["t"])
+        piece = next((g for g in geometry if g["src_start"] <= t_src < g["src_end"]), None)
+        if not piece:
+            continue
+        t = piece["out_start"] + (t_src - piece["src_start"])
+        if t < 1.2 or t + hold > duration - 1.2 or any(abs(t - a) < 2.5 for a, _ in out):
+            continue
+        out.append((round(t, 2), round(t + hold, 2)))
+        if len(out) == 2:
+            break
+    return sorted(out)
 
 
 def _measure_loudness(video: Path, segments: list[dict], target: float) -> dict | None:
@@ -93,6 +156,11 @@ def render_clip(cfg: Config, conn: sqlite3.Connection, clip_id: int) -> Path:
             for i, (a, b, lay) in enumerate(parts):
                 pieces.append((a, b, lay, i == 0, i == len(parts) - 1))
         layouts = [p[2] for p in pieces]
+        geometry, t_out = [], 0.0
+        for a, b, lay, _, _ in pieces:
+            geometry.append({"out_start": round(t_out, 3), "out_end": round(t_out + b - a, 3), "src_start": a, "src_end": b,
+                             "layout": lay["layout"], "cam_crop": lay.get("cam_crop"), "src_w": info["width"], "src_h": info["height"]})
+            t_out += b - a
 
         clips_dir = cfg.data_dir / "clips"
         work = clips_dir / str(clip_id)
@@ -109,9 +177,19 @@ def render_clip(cfg: Config, conn: sqlite3.Connection, clip_id: int) -> Path:
             t += b - a
             caption_y.append((t, cam_h + 20 if lay["layout"] == "split" else int(H * 0.70)))
         handle = source["key"].split(":", 1)[1]
+        disclosure = None
+        if source["permission"] == "campaign":
+            brief = json.loads(source["campaign_json"] or "{}") if "campaign_json" in source.keys() else {}
+            label = str(brief.get("disclosure") or "#ad")
+            disclosure = label if len(label.split()) > 1 else f"PAID PARTNERSHIP · {label}"
+        bar = ed.get("progress_bar", "rotate")
+        progress_y = None
+        if bar == "always" or (bar == "rotate" and clip_id % 3 != 2):
+            progress_y = cam_h - 5 if layouts[0]["layout"] == "split" else int(H * 0.78)
         (work / "captions.ass").write_text(
             build_ass(words, duration, clip["caption_style"], clip["hook_used"], ed["hook_seconds"],
-                      f"@{handle}", caption_y), encoding="utf-8")
+                      f"@{handle}", caption_y, disclosure, float(ed.get("disclosure_seconds", 4)), progress_y), encoding="utf-8")
+        punches = _punch_ins(conn, clip, geometry, duration, ed)
 
         loud = _measure_loudness(video, segments, ed["target_lufs"])
         norm = f"loudnorm=I={ed['target_lufs']}:TP=-1.5:LRA=11"
@@ -131,12 +209,25 @@ def render_clip(cfg: Config, conn: sqlite3.Connection, clip_id: int) -> Path:
             graph.append(f"[{k}:a]{','.join(fades) or 'anull'}[a{k}]")
         n = len(pieces)
         graph.append("".join(f"[v{k}][a{k}]" for k in range(n)) + f"concat=n={n}:v=1:a=1[vc][ac]")
-        graph.append(f"[vc]fps={fps},ass={clip_id}/captions.ass:fontsdir=_fonts,format=yuv420p[vout]")
+        zoom = ""
+        if punches:
+            cond = "+".join(f"between(it,{a:.2f},{b:.2f})" for a, b in punches)
+            zoom = (f"zoompan=z='if({cond},{float(ed.get('punch_zoom', 1.12)):.2f},1)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+                    f":d=1:s={W}x{H}:fps={fps},")
+        graph.append(f"[vc]fps={fps},{zoom}ass={clip_id}/captions.ass:fontsdir=_fonts,format=yuv420p[vout]")
         graph.append(f"[ac]{norm},aresample=48000[aout]")
         out_tmp = work / "clip.tmp.mp4"
-        cmd += ["-filter_complex", ";".join(graph), "-map", "[vout]", "-map", "[aout]", *_video_encoder(),
-                "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", out_tmp]
-        run(cmd, cwd=clips_dir)
+        tail = ["-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", out_tmp]
+        encoder = _video_encoder()
+        try:
+            run(cmd + ["-filter_complex", ";".join(graph), "-map", "[vout]", "-map", "[aout]", *encoder, *tail], cwd=clips_dir)
+        except RuntimeError:
+            if "h264_nvenc" not in encoder:
+                raise
+            # Backup: the GPU encoder failed (driver hiccup, out of sessions); render on the CPU instead.
+            log(f"  clip {clip_id}: NVENC failed, re-rendering with libx264")
+            run(cmd + ["-filter_complex", ";".join(graph), "-map", "[vout]", "-map", "[aout]", *CPU_ENCODER, *tail], cwd=clips_dir)
+        (work / "render.json").write_text(json.dumps({"pieces": geometry, "cam_h": cam_h, "W": W, "H": H}), encoding="utf-8")
         out = work / "clip.mp4"
         out_tmp.replace(out)
         run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{min(1.5, duration / 2):.2f}", "-i", out,

@@ -5,6 +5,7 @@ from .tiktok import TikTokPoster
 from .youtube import YouTubePoster
 
 POSTERS = {"youtube": YouTubePoster, "tiktok": TikTokPoster, "instagram": InstagramPoster}
+__all__ = ["POSTERS", "NotConnected", "PostError", "PostResult", "Poster", "get_connection", "get_poster", "save_connection"]
 # Facebook Reels, X and Snapchat Spotlight plug in here as further Poster subclasses.
 
 

@@ -6,6 +6,29 @@
 # campaign / caption_suffix: campaign name, and text every caption must end with (required credit,
 #   hashtags, paid-partnership disclosure). Copy these from the campaign brief.
 # cam: optional fixed facecam box in source pixels, [x, y, w, h]. Omit to auto-detect.
+#
+# When you join a paid campaign, set permission: campaign and paste the brief as a mapping, e.g.
+#   - name: Kai Cenat
+#     handle: kaicenat
+#     platform: twitch
+#     url: "https://www.twitch.tv/kaicenat"
+#     permission: campaign
+#     live_marathon: true
+#     caption_suffix: "Clipped from @kaicenat"     # text every caption must carry (the Caption Finisher adds it)
+#     campaign:
+#       name: "Kai Cenat GTA 6 (Content Rewards)"
+#       cpm: 1.50                # $ per 1,000 views, for the earnings estimate
+#       cap_per_clip: 150        # most one clip can earn
+#       budget: 10000            # campaign pool; new posts pause near the end of it
+#       ends: 2026-12-15         # new posts pause after this date
+#       platforms: [tiktok, instagram, youtube]   # where submissions count
+#       submit_within_minutes: 30                 # Content Rewards refuses posts older than this
+#       disclosure: "#ad"        # shown on screen for the first seconds and added to every caption
+#       required_tags: ["#KaiCenat"]
+#       required_text: ["@kaicenat"]
+#       banned: []               # words the brief forbids
+#       min_seconds: 10
+#       max_seconds: 90
 sources:
   - {name: Kai Cenat,   handle: kaicenat,    platform: twitch,  url: "https://www.twitch.tv/kaicenat",       permission: unknown, layout: auto, live_marathon: true}
   - {name: IShowSpeed,  handle: ishowspeed,  platform: youtube, url: "https://www.youtube.com/@IShowSpeed",  permission: unknown, layout: auto}

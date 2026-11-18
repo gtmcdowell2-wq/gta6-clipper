@@ -1,10 +1,11 @@
 PyYAML>=6.0
 python-dotenv>=1.0
-yt-dlp>=2026.6.9          # update often: `pip install -U yt-dlp` (sites break old versions)
+yt-dlp>=2026.10.26          # update often: `pip install -U yt-dlp` (sites break old versions)
 faster-whisper>=1.1
 numpy>=1.26
 opencv-python-headless>=4.9
-anthropic>=0.40
+anthropic>=2.8            # server-side refusal fallback (beta) needs a 2.x SDK
 Flask>=3.0
+waitress>=3.0             # production web server for the control center
 requests>=2.31
 tzdata>=2024.1

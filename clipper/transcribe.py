@@ -53,6 +53,13 @@ def load_model(cfg: Config):
             return model, f"{t['model_gpu']} on cuda"
         except Exception as e:
             log(f"  CUDA load failed ({str(e)[:120]}); falling back to CPU")
+    return load_cpu_model(cfg)
+
+
+def load_cpu_model(cfg: Config):
+    """The backup: the CPU model, used when there is no GPU or the GPU fails mid-run."""
+    from faster_whisper import WhisperModel
+    t = cfg["transcribe"]
     model = WhisperModel(t["model_cpu"], device="cpu", compute_type="int8", cpu_threads=os.cpu_count() or 4)
     return model, f"{t['model_cpu']} on cpu"
 

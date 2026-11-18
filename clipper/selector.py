@@ -55,31 +55,15 @@ def build_request(cfg: Config, vod: sqlite3.Row, source: sqlite3.Row, cand: sqli
 
 # ---------------------------------------------------------------- providers
 
-def call_anthropic(cfg: Config, system: str, user: str) -> str:
-    import anthropic
-
-    client = anthropic.Anthropic(api_key=secret("ANTHROPIC_API_KEY"))  # from .env
+def call_anthropic(cfg: Config, conn: sqlite3.Connection, system: str, user: str) -> str:
+    """Claude through the shared door (refusal fallback, outage backup model, spend cap, usage log)."""
+    from .llm import LLMDeclined, ask
     try:
-        response = client.messages.create(
-            model=cfg["selector"]["model"],
-            max_tokens=16000,
-            thinking={"type": "adaptive"},
-            output_config={"effort": cfg["selector"].get("effort", "medium")},
-            # The system prompt is identical for every candidate, so cache it.
-            system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
-            messages=[{"role": "user", "content": user}],
-        )
-    except anthropic.AuthenticationError:
-        raise RuntimeError("Anthropic API key was rejected. Check ANTHROPIC_API_KEY in .env") from None
-    except anthropic.NotFoundError:
-        raise RuntimeError(f"model {cfg['selector']['model']!r} not found. Check selector.model in config.yaml") from None
-    except anthropic.BadRequestError as e:
-        raise RuntimeError(f"Anthropic rejected the request: {e.message}") from None
-    if response.stop_reason == "refusal":
-        raise Rejected("model declined this window")
-    if response.stop_reason == "max_tokens":
-        raise Rejected("model response was cut off")
-    return "".join(b.text for b in response.content if b.type == "text")
+        answer = ask(cfg, conn, purpose="moment_picker", system=system, user=user,
+                     effort=cfg["selector"].get("effort", "medium"), model=cfg["selector"].get("model"))
+    except LLMDeclined as e:
+        raise Rejected(str(e)) from None
+    return answer.text
 
 
 def call_file(llm_dir: Path, cand_id: int, system: str, user: str) -> str | None:
@@ -226,7 +210,7 @@ def select_vod(cfg: Config, conn: sqlite3.Connection, vod_id: int) -> int:
         text = None
         try:
             if provider == "anthropic":
-                text = call_anthropic(cfg, system, user)
+                text = call_anthropic(cfg, conn, system, user)
             elif provider == "file":
                 text = call_file(llm_dir, cand["id"], system, user)
                 if text is None:
@@ -265,4 +249,68 @@ def select_vod(cfg: Config, conn: sqlite3.Connection, vod_id: int) -> int:
     else:
         conn.execute("UPDATE vods SET status='selected', updated_at=datetime('now') WHERE id=?", (vod_id,))
         conn.commit()
+    return made
+
+
+# ---------------------------------------------------------------- backup picker
+
+def backup_pick(cfg: Config, cand: sqlite3.Row, transcript: dict, source: sqlite3.Row) -> dict:
+    """A rule-based answer in the same shape Claude returns, so it passes through the same validation."""
+    segs = transcript["segments"]
+    peak = cand["peak_s"]
+    lo_t, hi_t = peak - 12, peak + 16
+    inside = [s for s in segs if s["end"] > lo_t and s["start"] < hi_t]
+    if not inside:
+        raise Rejected("no speech around the spike")
+    start, end = min(s["start"] for s in inside), max(s["end"] for s in inside)
+    sel = cfg["selector"]
+    if end - start < sel["min_seconds"]:
+        end = min(float(transcript["duration"]), start + sel["min_seconds"] + 2)
+    if end - start > 45:
+        end = start + 45
+    quote = max(inside, key=lambda s: (s["text"].count("!") + s["text"].isupper(), len(s["text"])))["text"].strip()
+    quote = " ".join(quote.split()[:9]).strip(' ".,')
+    name = source["name"]
+    return {"clip": {
+        "segments": [{"start": round(start, 2), "end": round(end, 2), "verbatim_text": " ".join(s["text"] for s in inside)[:400]}],
+        "archetype": "FREAKOUT", "title": f"{name}: {quote}",
+        "scores": {"hook": sel["min_overall_score"], "retention": sel["min_overall_score"], "shareability": sel["min_overall_score"],
+                   "overall": sel["min_overall_score"]},
+        "on_screen_hook_a": " ".join(f'"{quote}"'.split()[:7]), "on_screen_hook_b": "Wait for it...",
+        "post_title": f'{name} in GTA 6: "{quote}"'[:70], "caption": f"{name} on GTA 6 #GTA6",
+        "spoiler_risk": False, "why": "Picked by the backup picker from the strongest audio/chat spike (Claude was unavailable)."}}
+
+
+def backup_select_vod(cfg: Config, conn: sqlite3.Connection, vod_id: int, per_chunk: int = 4) -> int:
+    vod = conn.execute("SELECT * FROM vods WHERE id=?", (vod_id,)).fetchone()
+    source = conn.execute("SELECT * FROM sources WHERE id=?", (vod["source_id"],)).fetchone()
+    transcript = json.loads(Path(vod["transcript_path"]).read_text(encoding="utf-8"))
+    ctx_s = cfg["signals"]["context_seconds"]
+    styles = cfg["editor"]["caption_styles"]
+    made = 0
+    for cand in conn.execute("SELECT * FROM candidates WHERE vod_id=? AND status='new' ORDER BY score DESC", (vod_id,)).fetchall():
+        if made >= per_chunk:
+            conn.execute("UPDATE candidates SET status='rejected', llm_response=? WHERE id=?",
+                         (json.dumps({"reason": "backup picker only cuts the top spikes"}), cand["id"]))
+            continue
+        taken = [(r["start_s"], r["end_s"]) for r in conn.execute("SELECT start_s, end_s FROM clips WHERE vod_id=? AND status != 'rejected'", (vod_id,))]
+        window = (max(0.0, cand["peak_s"] - ctx_s), cand["peak_s"] + ctx_s)
+        try:
+            clip = validate(cfg, backup_pick(cfg, cand, transcript, source), transcript, window, taken)
+        except Rejected as e:
+            conn.execute("UPDATE candidates SET status='rejected', llm_response=? WHERE id=?", (json.dumps({"reason": f"backup: {e}"}), cand["id"]))
+            continue
+        n = conn.execute("SELECT count(*) FROM clips").fetchone()[0]
+        conn.execute(
+            """INSERT INTO clips (vod_id, candidate_id, segments, start_s, end_s, duration_s, archetype, working_title, hook_a, hook_b,
+                   hook_used, post_title, caption, score_hook, score_retention, score_shareability, score_overall, spoiler_risk, why,
+                   caption_style, picked_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'backup')""",
+            (vod_id, cand["id"], json.dumps(clip["segments"], ensure_ascii=False), clip["start_s"], clip["end_s"], clip["duration_s"],
+             clip["archetype"], clip["working_title"], clip["hook_a"], clip["hook_b"], clip["hook_a"], clip["post_title"],
+             (clip["caption"] + " " + (source["caption_suffix"] or "")).strip(), clip["scores"]["hook"], clip["scores"]["retention"],
+             clip["scores"]["shareability"], clip["scores"]["overall"], int(clip["spoiler_risk"]), clip["why"], styles[n % len(styles)]))
+        conn.execute("UPDATE candidates SET status='selected', llm_response=? WHERE id=?", (json.dumps({"backup": True}), cand["id"]))
+        made += 1
+    conn.execute("UPDATE vods SET status='selected', updated_at=datetime('now') WHERE id=?", (vod_id,))
+    conn.commit()
     return made

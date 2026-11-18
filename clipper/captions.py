@@ -86,9 +86,19 @@ def chunk_words(words: list[dict], max_words: int = 3, max_chars: int = 16) -> l
     return chunks
 
 
+# Text positions keep clear of the apps' own buttons: TikTok's top bar covers roughly the first 130 px,
+# and the caption/buttons area covers the bottom fifth and the right edge.
+TOP_SAFE = 150
+
+
 def build_ass(words: list[dict], duration: float, style_name: str, hook: str | None, hook_seconds: float,
-              credit: str | None, caption_y: list[tuple[float, int]]) -> str:
-    """caption_y: [(output_time_end, y)] so captions follow the layout of each spliced segment."""
+              credit: str | None, caption_y: list[tuple[float, int]], disclosure: str | None = None,
+              disclosure_seconds: float = 4.0, progress_y: int | None = None) -> str:
+    """caption_y: [(output_time_end, y)] so captions follow the layout of each spliced segment.
+
+    disclosure: paid-partnership label shown top-right for the first seconds (campaign clips, FTC).
+    progress_y: draw a thin progress bar across the frame at this height (None = no bar).
+    """
     st = STYLES.get(style_name) or STYLES["bold_yellow"]
     hk = st["hook"]
     head = f"""[Script Info]
@@ -101,8 +111,10 @@ ScaledBorderAndShadow: yes
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Cap,{st['font']},{st['size']},{st['primary']},&H000000FF,&H00000000,&H96000000,0,0,0,0,100,100,{st['spacing']},0,1,{st['outline']},{st['shadow']},5,60,60,0,1
-Style: Hook,{hk['font']},{hk['size']},{hk['text']},&H000000FF,{hk['box']},{hk['box']},0,0,0,0,100,100,1,0,{hk['border_style']},{hk['outline']},0,8,90,90,170,1
-Style: Credit,Poppins ExtraBold,38,&H40FFFFFF,&H000000FF,&H60000000,&H00000000,0,0,0,0,100,100,0,0,1,3,0,7,36,36,44,1
+Style: Hook,{hk['font']},{hk['size']},{hk['text']},&H000000FF,{hk['box']},{hk['box']},0,0,0,0,100,100,1,0,{hk['border_style']},{hk['outline']},0,8,90,90,{TOP_SAFE + 80},1
+Style: Credit,Poppins ExtraBold,38,&H40FFFFFF,&H000000FF,&H60000000,&H00000000,0,0,0,0,100,100,0,0,1,3,0,7,40,40,{TOP_SAFE},1
+Style: Disclosure,Poppins ExtraBold,34,&H00FFFFFF,&H000000FF,&H8C000000,&H8C000000,0,0,0,0,100,100,0,0,3,10,0,9,40,40,{TOP_SAFE},1
+Style: Bar,Poppins ExtraBold,10,{st['active']},&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -110,6 +122,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     events = []
     if credit:
         events.append(f"Dialogue: 0,{_ts(0)},{_ts(duration)},Credit,,0,0,0,,{_esc(credit)}")
+    if disclosure:
+        events.append(f"Dialogue: 3,{_ts(0)},{_ts(min(disclosure_seconds, duration))},Disclosure,,0,0,0,,{{\\fad(0,300)}}{_esc(disclosure)}")
+    if progress_y is not None:
+        ms = int(duration * 1000)
+        events.append(f"Dialogue: 4,{_ts(0)},{_ts(duration)},Bar,,0,0,0,,{{\\pos(0,{progress_y})\\clip(0,0,0,{H})"
+                      f"\\t(0,{ms},\\clip(0,0,{W},{H}))\\p1}}m 0 0 l {W} 0 l {W} 10 l 0 10{{\\p0}}")
     if hook:
         text = _esc(hook.upper() if st["upper"] else hook)
         events.append(f"Dialogue: 2,{_ts(0)},{_ts(min(hook_seconds, duration))},Hook,,0,0,0,,{{\\fad(0,250)}}{text}")

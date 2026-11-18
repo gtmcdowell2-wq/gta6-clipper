@@ -148,9 +148,9 @@ def init_db(cfg: Config) -> sqlite3.Connection:
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
     elif version != SCHEMA_VERSION:
         raise RuntimeError(f"database is schema v{version}, code expects v{SCHEMA_VERSION}")
-    ensure_extras(conn)
     if "caption_suffix" not in [r[1] for r in conn.execute("PRAGMA table_info(sources)")]:
         conn.execute("ALTER TABLE sources ADD COLUMN caption_suffix TEXT")  # databases created by milestone 1
+    ensure_extras(conn)
     sync_sources(conn, cfg)
     conn.commit()
     return conn
@@ -163,14 +163,15 @@ def sync_sources(conn: sqlite3.Connection, cfg: Config) -> None:
     for s in cfg.sources:
         keys.append(s.key)
         conn.execute(
-            """INSERT INTO sources (key, name, platform, url, permission, layout, cam, campaign, caption_suffix, notes, live_marathon, active)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,1)
+            """INSERT INTO sources (key, name, platform, url, permission, layout, cam, campaign, campaign_json, caption_suffix, notes, live_marathon, active)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)
                ON CONFLICT(key) DO UPDATE SET name=excluded.name, url=excluded.url,
                    permission=excluded.permission, layout=excluded.layout, cam=excluded.cam,
-                   campaign=excluded.campaign, caption_suffix=excluded.caption_suffix, notes=excluded.notes,
-                   live_marathon=excluded.live_marathon, active=1""",
+                   campaign=excluded.campaign, campaign_json=excluded.campaign_json, caption_suffix=excluded.caption_suffix,
+                   notes=excluded.notes, live_marathon=excluded.live_marathon, active=1""",
             (s.key, s.name, s.platform, s.url, s.permission, s.layout,
-             json.dumps(s.cam) if s.cam else None, s.campaign, s.caption_suffix, s.notes, int(s.live_marathon)),
+             json.dumps(s.cam) if s.cam else None, s.campaign_name, json.dumps(s.brief, default=str) if s.brief else None,
+             s.caption_suffix, s.notes, int(s.live_marathon)),
         )
     # Sources removed from the yaml are kept (their clips reference them) but deactivated.
     marks = ",".join("?" * len(keys)) or "''"
@@ -198,11 +199,29 @@ CREATE TABLE IF NOT EXISTS connections (
     detail TEXT, updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT NOT NULL DEFAULT (datetime('now')));
+CREATE TABLE IF NOT EXISTS clip_facts (
+    clip_id INTEGER PRIMARY KEY REFERENCES clips(id) ON DELETE CASCADE, facts TEXT NOT NULL,
+    profiled_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS alerts (
+    id INTEGER PRIMARY KEY, key TEXT NOT NULL UNIQUE, level TEXT NOT NULL DEFAULT 'warn', title TEXT NOT NULL,
+    detail TEXT, agent TEXT, link TEXT, first_seen TEXT NOT NULL DEFAULT (datetime('now')),
+    last_seen TEXT NOT NULL DEFAULT (datetime('now')), count INTEGER NOT NULL DEFAULT 1,
+    resolved_at TEXT, notified_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_alerts_open ON alerts(resolved_at, level);
+CREATE INDEX IF NOT EXISTS idx_events_ts ON agent_events(ts);
+CREATE INDEX IF NOT EXISTS idx_reviews_clip ON reviews(clip_id);
 """
 
 EXTRA_COLUMNS = {
-    "clips": {"reach_score": "REAL", "recommendation": "TEXT"},
-    "posts": {"attempts": "INTEGER NOT NULL DEFAULT 0", "next_try_at": "TEXT", "privacy": "TEXT", "stats_at": "TEXT"},
+    "agents": {"last_duration": "REAL", "avg_duration": "REAL"},
+    "sources": {"campaign_json": "TEXT", "live_now": "INTEGER NOT NULL DEFAULT 0", "live_title": "TEXT", "live_checked": "TEXT"},
+    "clips": {"reach_score": "REAL", "recommendation": "TEXT", "picked_by": "TEXT", "rec_reason": "TEXT",
+              "caption_final": "INTEGER NOT NULL DEFAULT 0"},
+    "posts": {"attempts": "INTEGER NOT NULL DEFAULT 0", "next_try_at": "TEXT", "privacy": "TEXT", "stats_at": "TEXT",
+              "title": "TEXT", "caption": "TEXT", "thumb_status": "TEXT", "submit_status": "TEXT", "submitted_at": "TEXT",
+              "live_at": "TEXT", "upload_started_at": "TEXT", "boosted": "INTEGER NOT NULL DEFAULT 0"},
 }
 
 

@@ -96,7 +96,7 @@ def run_checks() -> list[tuple[str, str, str]]:
 
     for mod, label in (("yaml", "PyYAML"), ("dotenv", "python-dotenv"), ("yt_dlp", "yt-dlp"),
                        ("faster_whisper", "faster-whisper"), ("cv2", "opencv"), ("anthropic", "anthropic"), ("flask", "Flask"),
-                       ("requests", "requests"), ("tzdata", "tzdata")):
+                       ("requests", "requests"), ("tzdata", "tzdata"), ("waitress", "waitress")):
         add(label, OK if importlib.util.find_spec(mod) else FAIL, "python package")
     from .util import find_tool
     tdl = find_tool("TwitchDownloaderCLI")
@@ -124,8 +124,22 @@ def run_checks() -> list[tuple[str, str, str]]:
 
     add(".env", OK if (ROOT / ".env").exists() else WARN,
         "present" if (ROOT / ".env").exists() else "missing; copy .env.example when a milestone needs keys")
-    llm = [k for k in ("ANTHROPIC_API_KEY", "GEMINI_API_KEY") if os.environ.get(k)]
-    add("LLM API key", OK if llm else WARN, ", ".join(llm) if llm else "not set (needed at milestone 3)")
+    add("Claude API key", OK if os.environ.get("ANTHROPIC_API_KEY") else WARN,
+        "set" if os.environ.get("ANTHROPIC_API_KEY") else "ANTHROPIC_API_KEY not set: the Moment Picker and critics wait for it")
+    try:
+        from importlib.metadata import version
+        v = version("anthropic")
+        add("anthropic SDK", OK if int(v.split(".")[0]) >= 2 else FAIL, f"{v} (2.x needed for the refusal fallback)")
+    except Exception:
+        pass
+    from .notify import channels
+    ch = channels()
+    add("phone alerts", OK if ch else WARN, ", ".join(ch) if ch else "none: set NTFY_TOPIC or DISCORD_WEBHOOK_URL in .env to get alerts on your phone")
+    try:
+        from .agents import build_agents
+        add("agent network", OK, f"{len(build_agents(cfg))} agents build")
+    except Exception as e:
+        add("agent network", FAIL, f"{type(e).__name__}: {e}")
 
     cfg.data_dir.mkdir(parents=True, exist_ok=True)
     free_gb = shutil.disk_usage(cfg.data_dir).free / 1e9

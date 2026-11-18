@@ -4,11 +4,12 @@ paths:
 
 download:
   max_height: 1080
-  chunk_hours: 2            # rolling chunk size for live marathons
+  chunk_hours: 2            # chunk size for finished VODs
+  live_chunk_minutes: 30    # while a streamer is live: shorter chunks, so clips post ~40 min after the moment
   raw_vod_retention_days: 3 # delete raw VODs this long after their clips are approved
 
 transcribe:
-  model_gpu: large-v3       # or distil-large-v3
+  model_gpu: large-v3-turbo # near large-v3 accuracy, several times faster on an NVIDIA card
   model_cpu: small
   language: en
 
@@ -18,9 +19,11 @@ signals:
   chat_hype_terms: ["LMAO", "LMFAO", "OMG", "W", "L", "💀", "😭", "KEKW", "LUL", "NO WAY", "CLIP IT", "CLIP THAT"]
 
 selector:
-  provider: anthropic       # anthropic | gemini
+  provider: anthropic       # anthropic | file (offline: write requests to disk, read answers back)
   model: claude-opus-5-5    # cheaper: claude-sonnet-5-5 or claude-haiku-5-5
   effort: medium
+  backup_picker: outage     # outage: rule-based picks if Claude is down | always: also with no API key | off
+  backup_after_minutes: 45  # how long Claude must be unavailable before the Backup Picker steps in
   min_seconds: 15
   max_seconds: 90
   min_overall_score: 7
@@ -35,6 +38,11 @@ editor:
   hook_seconds: 3
   target_lufs: -14
   caption_styles: [bold_yellow, clean_white, pop_green]   # rotated per clip
+  punch_in: rotate          # quick zoom-ins on the loudest reactions: rotate (2 of 3 clips) | always | off
+  punch_zoom: 1.12
+  punch_seconds: 0.7
+  progress_bar: rotate      # thin progress bar on the cam/gameplay seam: rotate | always | off
+  disclosure_seconds: 4     # paid-partnership badge at the start of campaign clips
 
 safety:
   # Titles/descriptions containing any of these are skipped outright (rule: no leaked footage).
@@ -54,6 +62,7 @@ posting:
   stagger_minutes: [60, 90]
   per_platform_daily: {youtube: 8, tiktok: 5, instagram: 8}   # TikTok allows 5 pending drafts per 24h
   active_hours: [8, 24]          # local time window posts may be scheduled in
+  attended_hours: [9, 23]        # campaign posts (submit within 30 min) only go out when you're likely awake
   timezone: America/New_York     # audience timezone for the window above
 
 review_app:
@@ -67,15 +76,38 @@ agents:
   max_vods_per_source: 3
   max_vod_age_days: 4
   min_free_gb: 15                # Downloader pauses below this
-  reach_weights: {selector: 30, share: 15, hook_critic: 15, signal: 15, archetype: 10, duration: 10, fresh: 5}
+  reach_weights: {selector: 25, share: 10, hook_critic: 15, signal: 15, archetype: 10, length: 5, fresh: 10, trend: 5, streamer: 5}
 
 youtube:
   privacy_status: private        # private | unlisted | public. Do one private test upload, then switch to public.
   category_id: "20"              # Gaming
   tags: [GTA6, GTA 6, Grand Theft Auto VI, gaming, shorts]
+  paid_product_placement: campaign  # campaign: declare paid placement on paid-campaign clips | true | false
+  custom_thumbnails: true        # set the Thumbnail Maker's cover on each Short (needs a phone-verified channel)
 
 tiktok:
   mode: inbox                    # sends a draft to your TikTok inbox; you tap Post in the app
 
 instagram:
   api_version: v27.0
+
+llm:
+  # Every Claude call goes through one place (clipper/llm.py).
+  model: claude-opus-5-5         # main model for the Moment Picker and critics
+  backup_model: claude-sonnet-5-5  # used only if the main model is overloaded or unreachable; null to turn off
+  refusal_fallback: true         # server-side fallback if a request is declined
+  daily_budget_usd: 30           # AI agents pause for the rest of the day past this (estimated from token usage)
+
+judges:
+  visual_judge: true             # Claude looks at 4 frames of each clip (about 2-4 cents per clip)
+
+notify:
+  # Put NTFY_TOPIC and/or DISCORD_WEBHOOK_URL in .env to get alerts on your phone.
+  levels: [urgent, error, warn, info]
+  quiet_hours: [1, 8]            # only urgent and error alerts between these hours (local time)
+  digest_hour: 9                 # the Daily Digest arrives after this hour
+
+ops:
+  auto_update_ytdlp: true        # install new yt-dlp releases (sites break old versions)
+  auto_restart: true             # restart by itself when idle after updates or settings changes
+  keep_backups: 56               # database snapshots kept (every 6h = 2 weeks)
