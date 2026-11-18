@@ -1,6 +1,6 @@
 PyYAML>=6.0
 python-dotenv>=1.0
-yt-dlp>=2026.10.26          # update often: `pip install -U yt-dlp` (sites break old versions)
+yt-dlp[default,curl-cffi,deno]>=2026.10.26   # default: YouTube JS solver (yt-dlp-ejs); curl-cffi: Kick; deno: JS runtime
 faster-whisper>=1.1
 numpy>=1.26
 opencv-python-headless>=4.9

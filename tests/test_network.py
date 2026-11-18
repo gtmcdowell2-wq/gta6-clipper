@@ -110,6 +110,11 @@ def main() -> int:
                 "chapters": [{"start": 0, "end": 3000, "title": "Grand Theft Auto V"}, {"start": 3000, "end": 9000, "title": "Grand Theft Auto VI"}]}
     check(game_ranges(marathon, pats) == [(3000.0, 9000.0)], "GTA V is not mistaken for GTA VI")
     check(game_ranges({"title": "GTA 6 day one", "duration": 500, "chapters": []}, pats) == [(0.0, 500.0)], "no chapters: the stream title decides")
+    from clipper.downloader import recorded_seconds
+    kick_live = {"title": "LIVE GTA 6", "duration": None, "is_live": True, "timestamp": 1_000_000, "chapters": []}
+    est = recorded_seconds(kick_live, now=1_000_000 + 3600)
+    check(est == 3420 and game_ranges({**kick_live, "duration": est}, pats) == [(0.0, 3420.0)],
+          "Kick live stream: length estimated from the start time (Kick reports none while live)")
 
     print("Synthetic stream")
     vod_dir = cfg.data_dir / "vods" / "kaicenat" / "test_0-100"

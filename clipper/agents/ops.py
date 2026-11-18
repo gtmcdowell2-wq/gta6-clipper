@@ -294,10 +294,10 @@ class YtDlpUpdater(Ops):
         ctx.set("ytdlp", {"installed": current, "latest": latest, "at": utcnow()})
         if latest == current:
             return None
-        out = subprocess.run(self.pip(f"yt-dlp=={latest}"), capture_output=True, text=True, timeout=600)
+        out = subprocess.run(self.pip(f"yt-dlp[default,curl-cffi,deno]=={latest}"), capture_output=True, text=True, timeout=600)
         check = subprocess.run([sys.executable, "-c", "import yt_dlp; print(yt_dlp.version.__version__)"], capture_output=True, text=True, timeout=60)
         if out.returncode != 0 or check.returncode != 0:
-            subprocess.run(self.pip(f"yt-dlp=={current}"), capture_output=True, text=True, timeout=600)
+            subprocess.run(self.pip(f"yt-dlp[default,curl-cffi,deno]=={current}"), capture_output=True, text=True, timeout=600)
             ctx.alert("ytdlp_update", f"yt-dlp {latest} failed to install; kept {current}", (out.stderr or check.stderr)[-400:], "warn")
             return f"yt-dlp {latest} failed to install; rolled back to {current}"
         ctx.resolve("ytdlp_update")

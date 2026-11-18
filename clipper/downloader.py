@@ -21,8 +21,34 @@ class Skipped(Exception):
     """The VOD must not be processed (leak keywords, wrong game...)."""
 
 
+def ydl_base(**extra) -> dict:
+    """Options every yt-dlp call shares: quiet, plus optional cookies.
+
+    YouTube sometimes answers 'Sign in to confirm you're not a bot'. The fix is to let yt-dlp use a browser where
+    you're signed in to YouTube (use a spare Google account): YTDLP_COOKIES_FROM_BROWSER=firefox in .env (Firefox
+    works best on Windows; Chrome and Edge lock their cookie store), or YTDLP_COOKIES_FILE=path/to/cookies.txt.
+    """
+    from .config import secret
+    opts = {"quiet": True, "no_warnings": True, **extra}
+    browser = secret("YTDLP_COOKIES_FROM_BROWSER")
+    if browser:
+        opts["cookiesfrombrowser"] = (browser.strip().lower(),)
+    elif secret("YTDLP_COOKIES_FILE"):
+        opts["cookiefile"] = secret("YTDLP_COOKIES_FILE")
+    return opts
+
+
+def recorded_seconds(meta: dict, now: float | None = None) -> float:
+    """How much of a VOD exists. Kick and YouTube report no length while live, so estimate it from the start time."""
+    import time
+    duration = float(meta.get("duration") or 0)
+    if not duration and meta.get("is_live") and meta.get("timestamp"):
+        duration = max(0.0, (now or time.time()) - float(meta["timestamp"]) - 180)  # 3 minutes of slack for the live edge
+    return duration
+
+
 def probe(url: str) -> dict:
-    with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "skip_download": True}) as ydl:
+    with yt_dlp.YoutubeDL(ydl_base(skip_download=True)) as ydl:
         info = ydl.extract_info(url, download=False)
     return {
         "platform_id": str(info["id"]).lstrip("v") if "twitch" in info.get("extractor", "") else str(info["id"]),
@@ -88,9 +114,10 @@ def download_video(url: str, out_dir: Path, max_height: int, start: float | None
         "merge_output_format": "mp4",
         "concurrent_fragment_downloads": 8,
         "retries": 10, "fragment_retries": 10,
-        "quiet": True, "no_warnings": True, "noprogress": True,
+        "noprogress": True,
         "overwrites": True,
     }
+    opts = ydl_base(**opts)
     proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")
     if proxy:  # range downloads go through ffmpeg, which ignores HTTPS_PROXY unless told
         opts["proxy"] = proxy
@@ -128,8 +155,8 @@ def download_chat(url: str, platform: str, platform_id: str, out_dir: Path,
                                  "text": (c.get("message") or {}).get("body") or ""})
             raw.unlink(missing_ok=True)
         elif platform == "youtube":
-            opts = {"skip_download": True, "writesubtitles": True, "subtitleslangs": ["live_chat"],
-                    "outtmpl": str(out_dir / "ytchat"), "quiet": True, "no_warnings": True}
+            opts = ydl_base(skip_download=True, writesubtitles=True, subtitleslangs=["live_chat"],
+                            outtmpl=str(out_dir / "ytchat"))
             with yt_dlp.YoutubeDL(opts) as ydl:
                 ydl.download([url])
             raw = out_dir / "ytchat.live_chat.json"

@@ -170,7 +170,11 @@ and start it again. `config-*.yaml` and `sources-*.yaml` snapshots sit next to i
 ## Known limits
 
 - Kick has no chat replay here, so Kick clips use audio and speech signals only.
-- YouTube blocks some downloads from data-center IPs; on a home connection this is normally fine.
+- YouTube sometimes answers "Sign in to confirm you're not a bot" (always from data-center IPs, sometimes at home).
+  Sign in to YouTube in Firefox with a spare Google account and set `YTDLP_COOKIES_FROM_BROWSER=firefox` in `.env`.
+- Kick VODs have no game chapters, so a Kick stream counts as GTA 6 when its title says so, including any
+  pre-game chatting at the start. The Visual Judge flags non-GTA footage once the Claude key is set.
+- Kick and YouTube report no length while a stream is live; the Scout estimates it from the start time.
 - GTA 6 story scenes are not letterboxed (seen on the first launch stream), so the letterbox Cutscene Detector
   rarely fires on them; the Visual Judge (needs the Claude key) is the main story-scene check.
 - The music guard detects a steady beat; it can't tell a licensed song from royalty-free music, so it only warns.

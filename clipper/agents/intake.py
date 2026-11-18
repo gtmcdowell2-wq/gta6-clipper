@@ -25,7 +25,9 @@ class _Quiet:
     def error(self, msg): pass
 
 
-QUIET = {"quiet": True, "no_warnings": True, "logger": _Quiet()}
+def quiet_opts(**extra) -> dict:
+    from ..downloader import ydl_base
+    return ydl_base(logger=_Quiet(), **extra)
 
 
 def _handle(source) -> str:
@@ -58,7 +60,7 @@ class Scout(Agent):
     def work(self, ctx: Ctx):
         import yt_dlp
 
-        from ..downloader import game_ranges, probe
+        from ..downloader import game_ranges, probe, recorded_seconds
         a = ctx.cfg["agents"]
         source = ctx.conn.execute("SELECT * FROM sources WHERE key=?", (self.key,)).fetchone()
         if not source or not source["active"]:
@@ -72,7 +74,7 @@ class Scout(Agent):
         patterns = ctx.cfg["watcher"]["game_patterns"]
         queued, notes = 0, []
         try:
-            with yt_dlp.YoutubeDL({**QUIET, "extract_flat": True, "playlistend": a["max_vods_per_source"]}) as ydl:
+            with yt_dlp.YoutubeDL(quiet_opts(extract_flat=True, playlistend=a["max_vods_per_source"])) as ydl:
                 listing = ydl.extract_info(self.listing_url(source), download=False)
             entries = [e for e in (listing.get("entries") or []) if e and e.get("url")][: a["max_vods_per_source"]]
         except Exception as e:
@@ -89,7 +91,9 @@ class Scout(Agent):
                 if "will begin in" not in str(e):  # a scheduled stream that hasn't started is not a problem
                     ctx.log(f"{source['name']}: could not read {url} ({str(e)[:160]})", level="warn")
                 continue
-            duration = float(meta["duration"] or 0)
+            # Kick and YouTube give no length while live; estimate what's recorded from the start time.
+            duration = recorded_seconds(meta)
+            meta["duration"] = duration
             age_days = (time.time() - meta["timestamp"]) / 86400 if meta["timestamp"] else 0
             if ctx.cfg.is_leak(meta["title"], meta["description"]):
                 ctx.set(f"scout:{url}", {"skip": "leak keyword"})
@@ -147,7 +151,7 @@ class StreamRadar(Agent):
         for s in ctx.conn.execute("SELECT * FROM sources WHERE active=1").fetchall():
             live, title = False, None
             try:
-                with yt_dlp.YoutubeDL({**QUIET, "skip_download": True}) as ydl:
+                with yt_dlp.YoutubeDL(quiet_opts(skip_download=True)) as ydl:
                     info = ydl.extract_info(self.live_url(s), download=False)
                 live = bool(info.get("is_live")) or info.get("live_status") == "is_live"
                 title = info.get("title") or info.get("description")
@@ -174,7 +178,7 @@ class Downloader(Agent):
 
     def work(self, ctx: Ctx):
         from ..downloader import Skipped, download
-        vod = ctx.conn.execute("SELECT * FROM vods WHERE status='new' ORDER BY published_at DESC, chunk_start_s LIMIT 1").fetchone()
+        vod = ctx.conn.execute("SELECT * FROM vods WHERE status='new' ORDER BY published_at DESC, chunk_start_s DESC LIMIT 1").fetchone()
         if not vod:
             return None
         ctx.cfg.data_dir.mkdir(parents=True, exist_ok=True)
@@ -202,7 +206,7 @@ class Transcriber(Agent):
 
     def work(self, ctx: Ctx):
         from ..transcribe import load_model, transcribe_vod
-        vod = ctx.conn.execute("SELECT id, title FROM vods WHERE status='downloaded' ORDER BY published_at DESC, chunk_start_s LIMIT 1").fetchone()
+        vod = ctx.conn.execute("SELECT id, title FROM vods WHERE status='downloaded' ORDER BY published_at DESC, chunk_start_s DESC LIMIT 1").fetchone()
         if not vod:
             return None
         if self._model is None:  # loaded once, reused for every chunk
@@ -228,7 +232,7 @@ class SignalAnalyst(Agent):
 
     def work(self, ctx: Ctx):
         from ..signals import analyze_vod
-        vod = ctx.conn.execute("SELECT id FROM vods WHERE status='transcribed' ORDER BY published_at DESC, chunk_start_s LIMIT 1").fetchone()
+        vod = ctx.conn.execute("SELECT id FROM vods WHERE status='transcribed' ORDER BY published_at DESC, chunk_start_s DESC LIMIT 1").fetchone()
         if not vod:
             return None
         return f"Found {analyze_vod(ctx.cfg, ctx.conn, vod['id'])} candidate moments in vod {vod['id']}"
@@ -244,7 +248,7 @@ class MomentPicker(Agent):
 
         from ..llm import LLMUnavailable
         from ..selector import select_vod
-        vod = ctx.conn.execute("SELECT id FROM vods WHERE status='analyzed' ORDER BY published_at DESC, chunk_start_s LIMIT 1").fetchone()
+        vod = ctx.conn.execute("SELECT id FROM vods WHERE status='analyzed' ORDER BY published_at DESC, chunk_start_s DESC LIMIT 1").fetchone()
         if not vod:
             return None
         provider = os.environ.get("CLIPPER_SELECTOR_PROVIDER") or ctx.cfg["selector"]["provider"]
@@ -283,7 +287,7 @@ class BackupPicker(Agent):
         no_key = not secret("ANTHROPIC_API_KEY")
         if not ((down and time.time() - down > grace and (mode == "always" or not no_key)) or (mode == "always" and no_key)):
             return None
-        vod = ctx.conn.execute("SELECT id FROM vods WHERE status='analyzed' ORDER BY published_at DESC, chunk_start_s LIMIT 1").fetchone()
+        vod = ctx.conn.execute("SELECT id FROM vods WHERE status='analyzed' ORDER BY published_at DESC, chunk_start_s DESC LIMIT 1").fetchone()
         if not vod:
             return None
         made = backup_select_vod(ctx.cfg, ctx.conn, vod["id"])
