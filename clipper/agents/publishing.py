@@ -169,6 +169,12 @@ class TimingPlanner(PlatformAgent):
             # Campaign posts must be submitted within minutes of going live, so they only go out when you're around.
             attended = clip["permission"] == "campaign" and self.platform != "tiktok"
             slot = self.next_slot(ctx, attended=attended)
+            # Footage recorded before GTA 6's release waits until the game is out (Rockstar removes pre-release footage).
+            from .inspectors import footage_time, release_time
+            full = ctx.conn.execute("SELECT * FROM clips WHERE id=?", (clip["id"],)).fetchone()
+            release, recorded = release_time(ctx.cfg), footage_time(ctx, full)
+            if release and recorded and recorded < release and slot.timestamp() < release + 900:
+                slot = datetime.fromtimestamp(release + 900 + random.uniform(0, 1500), tz=timezone.utc)
             privacy = (ctx.get("youtube_privacy") or ctx.cfg["youtube"].get("privacy_status", "private")) if self.platform == "youtube" else None
             ctx.conn.execute("INSERT OR IGNORE INTO posts (clip_id, platform, scheduled_for, privacy) VALUES (?,?,?,?)",
                              (clip["id"], self.platform, slot.strftime(FMT), privacy))

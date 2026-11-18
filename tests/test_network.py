@@ -81,6 +81,7 @@ def main() -> int:
     real["notify"] = {"levels": ["urgent", "error", "warn", "info"], "quiet_hours": [0, 0], "digest_hour": 0}
     real["ops"] = {"auto_update_ytdlp": False, "auto_restart": False, "keep_backups": 5}
     real["agents"]["min_free_gb"] = 1
+    real["safety"]["release_utc"] = "2099-01-01T00:00:00Z"  # everything here counts as pre-release footage
     (tmp / "config.yaml").write_text(yaml.safe_dump(real), encoding="utf-8")
     src = yaml.safe_load((ROOT / "sources.yaml").read_text(encoding="utf-8"))
     for s in src["sources"]:
@@ -98,6 +99,17 @@ def main() -> int:
         print(("  ok   " if cond else "  FAIL ") + label, flush=True)
         if not cond:
             failures.append(label)
+
+    print("Scout chapter logic")
+    from clipper.downloader import game_ranges
+    pats = cfg["watcher"]["game_patterns"]
+    live = {"title": "PLAYING GTA 6 FOR THE FIRST TIME", "duration": 3114,
+            "chapters": [{"start": 0, "end": 685, "title": "Just Chatting"}, {"start": 685, "end": 685, "title": "Grand Theft Auto VI"}]}
+    check(game_ranges(live, pats) == [(685.0, 3114.0)], "live stream: the open GTA VI chapter runs to the current length (Twitch reports it as 0 s long)")
+    marathon = {"title": "PLAYING EVERY GTA", "duration": 9000,
+                "chapters": [{"start": 0, "end": 3000, "title": "Grand Theft Auto V"}, {"start": 3000, "end": 9000, "title": "Grand Theft Auto VI"}]}
+    check(game_ranges(marathon, pats) == [(3000.0, 9000.0)], "GTA V is not mistaken for GTA VI")
+    check(game_ranges({"title": "GTA 6 day one", "duration": 500, "chapters": []}, pats) == [(0.0, 500.0)], "no chapters: the stream title decides")
 
     print("Synthetic stream")
     vod_dir = cfg.data_dir / "vods" / "kaicenat" / "test_0-100"
@@ -201,6 +213,9 @@ def main() -> int:
     drain("timing.youtube", "timing.tiktok", "timing.instagram")
     posts = conn.execute("SELECT * FROM posts ORDER BY platform, scheduled_for").fetchall()
     check(len(posts) == 6, f"{len(posts)} posts scheduled for 2 approved clips on 3 platforms")
+    check(all(p["scheduled_for"] >= "2099-01-01" for p in posts), "pre-release footage: every post held until after the game's release")
+    gate = conn.execute("SELECT verdict, summary FROM reviews WHERE clip_id=1 AND agent='release_gate'").fetchone()
+    check(gate and gate["verdict"] == "warn" and "before GTA 6's release" in gate["summary"], "Release Gate flags footage recorded before launch")
     for platform in ("youtube", "tiktok", "instagram"):
         times = [p["scheduled_for"] for p in posts if p["platform"] == platform]
         if len(times) == 2:

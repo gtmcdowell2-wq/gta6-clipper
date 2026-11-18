@@ -50,6 +50,9 @@ safety:
   # Transcript hits flag the clip for manual spoiler review.
   spoiler_keywords: ["final mission", "last mission", "ending", "credits", "dies", "killed off", "plot twist"]
   graphic_violence_lead_seconds: 7
+  # GTA 6's US release: midnight Eastern on Nov 19. Rockstar takes down pre-release footage, so clips recorded
+  # before this are flagged by the Release Gate and their posts are held until after it.
+  release_utc: "2026-11-19T05:00:00Z"
   # Permission levels that may ever be posted. "unknown" can be clipped for review but never posted.
   postable_permissions: [campaign, public_ok]
   auto_approve_threshold: null   # off. Leave off for the first weeks.

@@ -1,7 +1,7 @@
 # GTA 6 clipper
 
-A network of **119 agents** that watches permitted streamers, cuts vertical shorts from their GTA 6 streams,
-checks every clip 48 ways, waits for your approval, then writes per-platform posts, schedules and publishes them to
+A network of **120 agents** that watches permitted streamers, cuts vertical shorts from their GTA 6 streams,
+checks every clip 49 ways, waits for your approval, then writes per-platform posts, schedules and publishes them to
 YouTube Shorts, TikTok and Instagram Reels, keeps paid campaigns compliant and submitted on time, and tracks the views.
 You run it from **Clip Control**: a local app with a live **Mission Control** dashboard that also works on your phone.
 
@@ -34,7 +34,7 @@ One page, refreshed every 3 seconds, showing:
   daily budget, streamers live, open problems.
 - **Production line.** Chunks queued, then downloading, transcribing, finding moments, picking, rendering, agents
   checking, your review, scheduled and live. Busy stages glow.
-- **Agent network.** All 119 agents as status chips grouped by crew. Click one to see its job, its backup plan and its
+- **Agent network.** All 120 agents as status chips grouped by crew. Click one to see its job, its backup plan and its
   last action, and to run it now or pause it.
 - **Side panels.** Needs attention (deduplicated alerts), live activity, up next, streamers (with LIVE badges),
   connectors, system health (disk, GPU, backups, yt-dlp, clock, lanes, network) and latest clips.
@@ -49,7 +49,7 @@ Full roster with every agent's job and backup plan: [docs/AGENTS.md](docs/AGENTS
 | Crew | Agents | What it does |
 |---|---|---|
 | Intake | 17 | One **Scout per streamer**: 30-minute chunks while live, so clips post about 40 minutes after the moment. Also the **Stream Radar** (who's live), Downloader, Transcriber (Whisper large-v3-turbo on GPU), Signal Analyst, **Moment Picker** (Claude), **Backup Picker** (rules, if Claude is down), Editor, Caption Finisher, **Clip Profiler** (measures each clip once), Thumbnail Maker and Trend Watcher |
-| Inspection | 39 | One inspector per check: format, length, loudness, peaks, silence, black frames, freezes, sharpness, bitrate, audio track, facecam, platform safe zones, **cutscene detector** (letterbox bars), **duplicate detector** (picture fingerprints), thumbnail, opening frame, caption timing and readability, hook timing and text, title, caption limits (Instagram's 5 hashtags), hashtags, language, credit, permission, leaks, spoilers, violence in the first 7s, **paid disclosure**, **campaign brief rules**, **music guard** (in-game radio and Content ID risk), source authenticity, game check and four originality guards |
+| Inspection | 40 | One inspector per check: format, length, loudness, peaks, silence, black frames, freezes, sharpness, bitrate, audio track, facecam, platform safe zones, **cutscene detector** (letterbox bars), **duplicate detector** (picture fingerprints), thumbnail, opening frame, caption timing and readability, hook timing and text, title, caption limits (Instagram's 5 hashtags), hashtags, language, credit, permission, leaks, spoilers, violence in the first 7s, **paid disclosure**, **campaign brief rules**, **music guard** (in-game radio and Content ID risk), source authenticity, game check, the **Release Gate** (pre-release footage waits for launch) and five originality guards |
 | Judges | 10 | Hook Critic (Claude, text), **Visual Judge** (Claude looks at 4 frames), six reach scorers (signal, archetype, freshness, length, trend, streamer pull), the Reach Forecaster and the Gatekeeper |
 | Publishing | 24 | For each of YouTube, TikTok and Instagram: Metadata Writer, Timing Planner, Publisher, Stats Tracker, Token Keeper, Limit Watcher and Momentum Watcher. Plus the **Thumbnail Setter** (custom Shorts thumbnails), Draft Reminder and Breakout Booster |
 | Campaign | 5 | **Campaign Clerk** (30-minute submit window), Submission Tracker, Earnings Accountant, Budget Watcher and Brief Keeper |
@@ -171,5 +171,7 @@ and start it again. `config-*.yaml` and `sources-*.yaml` snapshots sit next to i
 
 - Kick has no chat replay here, so Kick clips use audio and speech signals only.
 - YouTube blocks some downloads from data-center IPs; on a home connection this is normally fine.
+- GTA 6 story scenes are not letterboxed (seen on the first launch stream), so the letterbox Cutscene Detector
+  rarely fires on them; the Visual Judge (needs the Claude key) is the main story-scene check.
 - The music guard detects a steady beat; it can't tell a licensed song from royalty-free music, so it only warns.
 - Facebook Reels, X and Snapchat aren't built; each would be another class in `clipper/posters/`.

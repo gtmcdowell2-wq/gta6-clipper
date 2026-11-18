@@ -44,9 +44,20 @@ def game_ranges(meta: dict, patterns: list[str]) -> list[tuple[float, float]]:
     Marathon VODs switch games, and the chapter list is the only reliable per-range signal.
     """
     hit = lambda text: any(p.lower() in (text or "").lower() for p in patterns)
-    ranges = [(c["start"], c["end"]) for c in meta["chapters"] if hit(c["title"])]
-    if not ranges and not meta["chapters"] and hit(meta["title"]):
-        ranges = [(0.0, float(meta["duration"] or 0))]
+    duration = float(meta.get("duration") or 0)
+    chapters = sorted(meta["chapters"], key=lambda c: c["start"])
+    ranges = []
+    for i, c in enumerate(chapters):
+        start, end = float(c["start"]), float(c["end"] or 0)
+        # While a stream is live, Twitch reports the current chapter with end == start (it hasn't ended yet).
+        # A chapter runs until the next one begins; the last one runs to the end of the recording so far.
+        until = float(chapters[i + 1]["start"]) if i + 1 < len(chapters) else duration
+        if end <= start or i == len(chapters) - 1:
+            end = max(end, until)
+        if hit(c["title"]) and end > start:
+            ranges.append((start, end))
+    if not ranges and not chapters and hit(meta["title"]):
+        ranges = [(0.0, duration)]
     return ranges
 
 

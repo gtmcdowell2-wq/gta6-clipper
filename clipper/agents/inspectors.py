@@ -602,6 +602,38 @@ class MusicGuard(Inspector):
         return PASS, "no steady music beat detected"
 
 
+def footage_time(ctx: Ctx, clip) -> float | None:
+    """When the clip's moment was recorded (unix time): stream start + chunk offset + clip offset."""
+    row = ctx.conn.execute("SELECT strftime('%s', published_at) AS t, chunk_start_s FROM vods WHERE id=?", (clip["vod_id"],)).fetchone()
+    if not row or not row["t"]:
+        return None
+    return int(row["t"]) + (row["chunk_start_s"] or 0) + (clip["start_s"] or 0)
+
+
+def release_time(cfg) -> float | None:
+    from datetime import datetime
+    value = cfg["safety"].get("release_utc")
+    if not value:
+        return None
+    return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
+
+
+class ReleaseGate(Inspector):
+    name, title = "release_gate", "Release Gate"
+    job = "Flags clips recorded before GTA 6's official release (Nov 19, midnight Eastern). Rockstar takes down pre-release footage; streams that start early are usually an early or region unlock, so these clips are held until launch and should show gameplay, not story."
+    need_facts = False
+
+    def check(self, ctx, clip, f):
+        release, at = release_time(ctx.cfg), footage_time(ctx, clip)
+        if release is None or at is None:
+            return "skipped", "release time or recording time unknown"
+        if at < release:
+            hours = (release - at) / 3600
+            return WARN, (f"recorded {hours:.1f}h before GTA 6's release: Rockstar takes down pre-release footage. "
+                          "Its posts are held until launch; keep it to gameplay, not story scenes")
+        return PASS, "recorded after release"
+
+
 class SourceAuthenticityGuard(Inspector):
     name, title = "source_authenticity_guard", "Source Authenticity Guard"
     job = "Confirms the footage came from the streamer's own channel on the expected site (never a re-upload, compilation or AI video)."
@@ -725,5 +757,5 @@ INSPECTORS = [FormatInspector, LengthInspector, LoudnessInspector, PeakInspector
               CaptionTimingInspector, CaptionReadabilityInspector, HookTimingInspector, HookTextInspector, TitleInspector,
               CaptionTextInspector, HashtagInspector, LanguageInspector, CreditInspector,
               PermissionGuard, LeakGuard, SpoilerGuard, ViolenceLeadGuard, DisclosureGuard, CampaignRulesGuard, MusicGuard,
-              SourceAuthenticityGuard, GameCheck,
+              SourceAuthenticityGuard, GameCheck, ReleaseGate,
               TitleOriginality, HookOriginality, StyleRotationGuard, StretchGuard, CadenceGuard]

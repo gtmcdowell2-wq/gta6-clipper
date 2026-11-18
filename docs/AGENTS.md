@@ -1,4 +1,4 @@
-# The agent network: 119 agents
+# The agent network: 120 agents
 
 Generated from the code (`python run_pipeline.py agents` prints the same list). Each agent has one job, a schedule, a pause switch, an activity log and a backup plan for when its normal method fails. Agents in the same *lane* take turns on one thread; separate lanes run in parallel, and the Watchdog restarts any lane that stops.
 
@@ -29,7 +29,7 @@ Finds GTA 6 footage and turns it into rendered clips.
 | **Thumbnail Maker** | Makes a full-size 1080x1920 cover for each clip from its best frame (the Visual Judge's pick, else the sharpest frame with a face) for YouTube's Shorts thumbnail. | Without the Visual Judge's pick it chooses by face, sharpness and brightness; without any frame data it uses the 1.5-second frame. | `render` |
 | **Trend Watcher** | Every 6 hours reads YouTube's most popular gaming videos (1 quota unit) and keeps a list of trending terms, which the Trend Scorer and Hashtag Strategist use. | Until YouTube is connected it uses a launch-week seed list (GTA 6, Vice City, Leonida, police chase, first time, glitch...). | `radar` |
 
-## Inspection crew (39)
+## Inspection crew (40)
 
 Each inspector checks one thing on every finished clip.
 
@@ -69,6 +69,7 @@ Each inspector checks one thing on every finished clip.
 | **Music Guard** | Listens for a steady musical beat (in-game radio, stream music). Licensed songs trigger YouTube Content ID claims and muted audio on TikTok/Instagram, and many briefs say to mute the radio. | If the measurement it needs is missing it records 'skipped' instead of guessing, and the Gatekeeper treats that as a reason for a human look. | `inspect` |
 | **Source Authenticity Guard** | Confirms the footage came from the streamer's own channel on the expected site (never a re-upload, compilation or AI video). | If the measurement it needs is missing it records 'skipped' instead of guessing, and the Gatekeeper treats that as a reason for a human look. | `inspect` |
 | **Game Check** | Confirms the moment is GTA 6 itself (stream chapter or title), not another game the streamer played that day. | If the measurement it needs is missing it records 'skipped' instead of guessing, and the Gatekeeper treats that as a reason for a human look. | `inspect` |
+| **Release Gate** | Flags clips recorded before GTA 6's official release (Nov 19, midnight Eastern). Rockstar takes down pre-release footage; streams that start early are usually an early or region unlock, so these clips are held until launch and should show gameplay, not story. | If the measurement it needs is missing it records 'skipped' instead of guessing, and the Gatekeeper treats that as a reason for a human look. | `inspect` |
 | **Title Originality** | Guards against YouTube's inauthentic-content rule by flagging titles that are near-copies of another clip from the past week. | If the measurement it needs is missing it records 'skipped' instead of guessing, and the Gatekeeper treats that as a reason for a human look. | `inspect` |
 | **Hook Originality** | Flags an on-screen hook that another recent clip already used word for word. | If the measurement it needs is missing it records 'skipped' instead of guessing, and the Gatekeeper treats that as a reason for a human look. | `inspect` |
 | **Style Rotation Guard** | Makes sure consecutive uploads don't share one caption template, so the channel doesn't look mass-produced. | If the measurement it needs is missing it records 'skipped' instead of guessing, and the Gatekeeper treats that as a reason for a human look. | `inspect` |

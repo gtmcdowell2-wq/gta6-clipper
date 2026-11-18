@@ -28,7 +28,7 @@ CREWS = {
 }
 
 FMT = "%Y-%m-%d %H:%M:%S"
-NETWORK_VERSION = 2  # bump when the set of reviewers changes, so pending clips are judged again
+NETWORK_VERSION = 3  # bump when the set of reviewers changes, so pending clips are judged again
 
 
 def utcnow() -> str:
