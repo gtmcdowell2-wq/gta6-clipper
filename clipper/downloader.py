@@ -47,8 +47,16 @@ def recorded_seconds(meta: dict, now: float | None = None) -> float:
     return duration
 
 
+class _Silent:
+    """yt-dlp prints errors itself even when they're raised; the callers report them, so stay quiet."""
+    def debug(self, msg): pass
+    def info(self, msg): pass
+    def warning(self, msg): pass
+    def error(self, msg): pass
+
+
 def probe(url: str) -> dict:
-    with yt_dlp.YoutubeDL(ydl_base(skip_download=True)) as ydl:
+    with yt_dlp.YoutubeDL(ydl_base(skip_download=True, logger=_Silent())) as ydl:
         info = ydl.extract_info(url, download=False)
     return {
         "platform_id": str(info["id"]).lstrip("v") if "twitch" in info.get("extractor", "") else str(info["id"]),

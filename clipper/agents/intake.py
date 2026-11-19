@@ -30,6 +30,18 @@ def quiet_opts(**extra) -> dict:
     return ydl_base(logger=_Quiet(), **extra)
 
 
+def youtube_bot_check(ctx, error) -> bool:
+    """YouTube's 'confirm you're not a bot' wall: raise one clear alert with the fix instead of a log line nobody reads."""
+    text = str(error)
+    if "confirm you" not in text or "not a bot" not in text:
+        return False
+    ctx.alert("youtube_bot_check", "YouTube is asking the bot to sign in",
+              "YouTube blocked a download with 'confirm you're not a bot', so YouTube streamers can't be clipped. "
+              "Fix: sign in to YouTube in Firefox with a spare Google account, add YTDLP_COOKIES_FROM_BROWSER=firefox to .env, "
+              "then restart Clip Control.", "error")
+    return True
+
+
 def _handle(source) -> str:
     return source["key"].split(":", 1)[1]
 
@@ -78,8 +90,10 @@ class Scout(Agent):
                 listing = ydl.extract_info(self.listing_url(source), download=False)
             entries = [e for e in (listing.get("entries") or []) if e and e.get("url")][: a["max_vods_per_source"]]
         except Exception as e:
-            ctx.log(f"{source['name']}: could not list videos ({str(e)[:160]})", level="warn")
+            if not youtube_bot_check(ctx, e):
+                ctx.log(f"{source['name']}: could not list videos ({str(e)[:160]})", level="warn")
             entries = []
+        blocked = False
         for entry in entries:
             url = entry["url"].split("#__youtubedl_smuggle")[0]
             seen = ctx.get(f"scout:{url}") or {}
@@ -88,6 +102,9 @@ class Scout(Agent):
             try:
                 meta = probe(url)
             except Exception as e:
+                if youtube_bot_check(ctx, e):
+                    blocked = True
+                    break
                 if "will begin in" not in str(e):  # a scheduled stream that hasn't started is not a problem
                     ctx.log(f"{source['name']}: could not read {url} ({str(e)[:160]})", level="warn")
                 continue
@@ -128,6 +145,8 @@ class Scout(Agent):
             ctx.conn.commit()
         ctx.conn.execute("UPDATE sources SET last_checked=datetime('now') WHERE id=?", (source["id"],))
         ctx.conn.commit()
+        if source["platform"] == "youtube" and entries and not blocked:
+            ctx.resolve("youtube_bot_check")  # YouTube answered normally again
         if queued:
             ctx.conn.execute("UPDATE agents SET run_requested=1 WHERE name='downloader'")
             ctx.conn.commit()
@@ -191,6 +210,9 @@ class Downloader(Agent):
             download(ctx.cfg, ctx.conn, vod["url"], vod_id=vod["id"])
         except Skipped as e:
             return f"Skipped vod {vod['id']}: {e}"
+        except Exception as e:
+            youtube_bot_check(ctx, e)
+            raise
         return f"Downloaded {vod['title']!r} from {vod['chunk_start_s'] / 3600:.1f}h"
 
 

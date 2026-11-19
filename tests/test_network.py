@@ -116,6 +116,18 @@ def main() -> int:
     check(est == 3420 and game_ranges({**kick_live, "duration": est}, pats) == [(0.0, 3420.0)],
           "Kick live stream: length estimated from the start time (Kick reports none while live)")
 
+    print("YouTube bot check")
+    from clipper.agents.base import Ctx
+    from clipper.agents.intake import youtube_bot_check
+    probe_ctx = Ctx(cfg, conn, type("A", (), {"name": "scout.test"})())
+    check(not youtube_bot_check(probe_ctx, "HTTP Error 404") and youtube_bot_check(
+        probe_ctx, "ERROR: [youtube] abc: Sign in to confirm you're not a bot. This helps protect our community."),
+        "only YouTube's bot wall raises the alert")
+    alert = conn.execute("SELECT level, detail FROM alerts WHERE key='youtube_bot_check'").fetchone()
+    check(alert and alert["level"] == "error" and "YTDLP_COOKIES_FROM_BROWSER=firefox" in alert["detail"], "the alert tells you the exact fix")
+    conn.execute("DELETE FROM alerts")
+    conn.commit()
+
     print("Synthetic stream")
     vod_dir = cfg.data_dir / "vods" / "kaicenat" / "test_0-100"
     video, transcript = _synthetic_stream(vod_dir)
