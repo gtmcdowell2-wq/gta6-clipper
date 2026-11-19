@@ -7,6 +7,7 @@ Return strict JSON only:
   "mostly_cutscene": false,     // true if most frames show a story scene rather than free gameplay: cinematic camera angles, character dialogue subtitles, no minimap or HUD. GTA 6 story scenes are often NOT letterboxed, so don't rely on black bars
   "graphic_opening": false,     // true only if frame 1 shows gore or a graphic death
   "not_gta": false,             // true if the gameplay clearly isn't a Grand Theft Auto game
+  "in_game_show": false,        // true if most frames show an in-game TV show, film, or comedy/stage performance playing on screen (Rockstar removes these when posted on their own)
   "issues": ["concrete visual problems, at most 3: cam cropped badly, overlay or alert covering the action, unreadable text, black or frozen picture"],
   "best_cover_frame": 1         // which frame (1-4) makes the best cover image: a clear face and readable action
 }

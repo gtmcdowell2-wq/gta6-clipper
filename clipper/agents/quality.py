@@ -134,10 +134,12 @@ class VisualJudge(Judge):
             flags.append("graphic content in the opening frame")
         if data.get("not_gta"):
             flags.append("doesn't look like GTA gameplay")
+        if data.get("in_game_show"):
+            flags.append("shows an in-game TV show or performance, which Rockstar removes when posted on its own")
         flags += [str(x) for x in (data.get("issues") or [])][:3]
         best = data.get("best_cover_frame")
         details = {"best_cover": picks[int(best) - 1]["t"] if isinstance(best, int) and 1 <= best <= len(picks) else None,
-                   "model": answer.model, **{k: data.get(k) for k in ("mostly_cutscene", "graphic_opening", "not_gta")}}
+                   "model": answer.model, **{k: data.get(k) for k in ("mostly_cutscene", "graphic_opening", "not_gta", "in_game_show")}}
         ctx.review(clip["id"], WARN if flags else PASS, "; ".join(flags) or "Frames look like clean GTA gameplay with a good cam", details=details)
         return f"Clip {clip['id']}: {'; '.join(flags) or 'frames look good'}"
 

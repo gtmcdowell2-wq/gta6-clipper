@@ -135,7 +135,7 @@ def serve() -> tuple[http.server.HTTPServer, State]:
                     return self.reply(529, {"type": "error", "error": {"type": "overloaded_error", "message": "Overloaded"}},
                                       {"x-should-retry": "false"})
                 if isinstance(content, list):  # frames attached: the Visual Judge
-                    answer = {"mostly_cutscene": False, "graphic_opening": False, "not_gta": False, "issues": [], "best_cover_frame": 2}
+                    answer = {"mostly_cutscene": False, "graphic_opening": False, "not_gta": False, "in_game_show": False, "issues": [], "best_cover_frame": 2}
                 else:
                     answer = {"hook_score": 8, "title_score": 7, "context_independent": True, "misleading_title": False,
                               "violence_in_first_7s": False, "spoiler": False, "issues": [], "better_title": "Better title",

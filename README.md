@@ -141,6 +141,9 @@ prints ALL PASSED.
 
 - `unknown` sources are not watched and can never be posted. The Gatekeeper marks their clips *blocked*, and each
   platform's Publisher re-checks permission and approval at upload time.
+- Rockstar's video policy (endings, cutscene compilations, big story reveals, in-game TV shows and comedy
+  performances on their own, pre-release footage) is covered by the Spoiler Guard, Cutscene Detector, Visual Judge
+  and Release Gate. If unsure about a clip, Take-Two takes questions at copyright@take2games.com.
 - Leak keywords skip a VOD; the Leak Guard fails any clip with leak wording. Spoiler flags, cutscene detection and
   slurs show on the review card. Captions mask strong language.
 - Auto-approve is off (`safety.auto_approve_threshold: null`). Even when on, it never approves spoiler-flagged,

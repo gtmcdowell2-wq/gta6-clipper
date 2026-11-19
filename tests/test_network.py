@@ -333,7 +333,7 @@ def main() -> int:
             return None
     wd = agents["watchdog"]
     mini = Orchestrator(cfg, [Tick(cfg), wd])
-    mini.start()
+    mini.start_lane("tick")  # only the lane under test; the Watchdog itself runs once, by hand, below
     dead = threading.Thread(target=lambda: None)
     dead.start()
     dead.join()
