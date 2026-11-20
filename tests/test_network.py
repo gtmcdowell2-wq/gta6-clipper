@@ -328,6 +328,16 @@ def main() -> int:
     backups = list((cfg.data_dir / "backups").glob("clipper-*.db"))
     check(len(backups) == 1 and kv_get(conn, "verified_backup") == backups[0].name, "Archivist backed up the database and the Backup Verifier checked it")
     NetworkProber.HOSTS = {"Stand-in": base}
+    conn.execute("INSERT INTO vods (source_id, platform_id, url, title, duration_s, published_at, chunk_start_s, chunk_end_s, status)"
+                 " VALUES (?, 'old', 'https://www.twitch.tv/videos/2', 'GTA 6 marathon', 7200, datetime('now','-3 days'), 0, 1800, 'new')",
+                 (source_id,))
+    conn.execute("INSERT INTO vods (source_id, platform_id, url, title, duration_s, published_at, chunk_start_s, chunk_end_s, status)"
+                 " VALUES (?, 'fresh', 'https://www.twitch.tv/videos/3', 'GTA 6 marathon', 7200, datetime('now','-2 hours'), 0, 1800, 'new')",
+                 (source_id,))
+    conn.commit()
+    orch.run_agent(agents["janitor"], conn)
+    states = {r[0]: r[1] for r in conn.execute("SELECT platform_id, status FROM vods WHERE platform_id IN ('old','fresh')")}
+    check(states == {"old": "skipped", "fresh": "new"}, f"Janitor expires stale queued footage and keeps fresh chunks ({states})")
     drain("health_monitor", "network_prober", "alert_desk", "log_keeper", "disk_forecaster", "performance_monitor", "config_watcher",
           "restart_manager", "janitor")
     check(kv_get(conn, "network")["Stand-in"]["ok"] and kv_get(conn, "health")["disk_free_gb"] > 0, "Health Monitor and Network Prober report")

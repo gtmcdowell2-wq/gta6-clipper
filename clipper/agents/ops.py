@@ -88,10 +88,20 @@ class Supervisor(Ops):
 
 class Janitor(Ops):
     name, title, interval = "janitor", "Janitor", 1800
-    job = "Deletes raw VOD files once every clip from them has been reviewed and the retention period has passed, and removes rejected clip files after a week."
+    job = ("Deletes raw VOD files once every clip from them has been reviewed and the retention period has passed, removes rejected "
+           "clip files after a week, and expires queued footage too old to matter (launch-week moments go stale within a day or two).")
     backup = "When the Disk Forecaster sees the drive filling fast, it halves the retention period until there's room again."
 
     def work(self, ctx: Ctx):
+        # Marathon streams queue far more footage than one PC can process, newest first. Chunks still waiting after
+        # download.max_chunk_age_hours would only ever be reached when nothing fresher exists, so expire them.
+        max_age = float(ctx.cfg["download"].get("max_chunk_age_hours", 36))
+        expired = ctx.conn.execute(
+            "UPDATE vods SET status='skipped', skip_reason=?, updated_at=datetime('now') WHERE status='new'"
+            " AND published_at IS NOT NULL AND CAST(strftime('%s', published_at) AS REAL) + coalesce(chunk_end_s, chunk_start_s, 0)"
+            " < CAST(strftime('%s', 'now') AS REAL) - ?",
+            (f"footage older than {max_age:g}h before it could be downloaded", max_age * 3600)).rowcount
+        ctx.conn.commit()
         days = ctx.cfg["download"]["raw_vod_retention_days"]
         if ctx.get("janitor_aggressive"):
             days = max(0.5, days / 2)
@@ -119,7 +129,9 @@ class Janitor(Ops):
                 shutil.rmtree(folder, ignore_errors=True)
             ctx.conn.execute("UPDATE clips SET file_path=NULL WHERE id=?", (c["id"],))
         ctx.conn.commit()
-        return f"Freed {freed / 1e9:.1f} GB ({purged} raw VOD chunk(s) removed)" if freed else None
+        notes = ([f"freed {freed / 1e9:.1f} GB ({purged} raw VOD chunk(s) removed)"] if freed else []) + \
+                ([f"expired {expired} queued chunk(s) of stale footage"] if expired else [])
+        return "Janitor: " + "; ".join(notes) if notes else None
 
 
 class Archivist(Ops):

@@ -7,6 +7,7 @@ download:
   chunk_hours: 2            # chunk size for finished VODs
   live_chunk_minutes: 30    # while a streamer is live: shorter chunks, so clips post ~40 min after the moment
   raw_vod_retention_days: 3 # delete raw VODs this long after their clips are approved
+  max_chunk_age_hours: 36    # queued footage older than this is skipped (it's past its viral window)
 
 transcribe:
   model_gpu: large-v3-turbo # near large-v3 accuracy, several times faster on an NVIDIA card
